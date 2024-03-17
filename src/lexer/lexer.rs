@@ -78,4 +78,14 @@ impl Lexer {
             self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\0')
         }
     }
+    pub fn peek_str(&mut self, expected: &'static str) -> bool {
+        for i in 0..expected.len() {
+            if self.curr_char != expected.chars().nth(i).unwrap() {
+                self.reverse(i);
+                return false;
+            }
+            self.advance(1);
+        }
+        true
+    }
 }
