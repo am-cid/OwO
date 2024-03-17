@@ -1,2 +1,2 @@
 # OwO
-compiler for UwU++ written in rust
+compiler for [UwU++](https://github.com/Gidsss/UwUIDE) written in rust
