@@ -39,4 +39,43 @@ impl Lexer {
             d_pos: (0, 0),
         }
     }
+    pub fn advance(&mut self, times: usize) -> () {
+        for _ in 0..times {
+            if self.pos > self.source.len() - 1 {
+                self.curr_char = '\0';
+                return;
+            }
+            self.pos += 1;
+            self.d_pos.0 += 1;
+            if self.curr_char == '\n' {
+                self.d_pos.0 = 0;
+                self.d_pos.1 += 1;
+            }
+            self.curr_char = self.peek_char;
+            self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\0');
+        }
+    }
+    pub fn reverse(&mut self, times: usize) -> () {
+        for _ in 0..times {
+            if self.pos == 0 {
+                self.d_pos.0 = 0;
+                self.curr_char = self.source.chars().nth(0).unwrap_or('\0');
+                return;
+            }
+            self.pos -= 1;
+            self.d_pos.0 = match self.d_pos.0 {
+                0 => 0,
+                _ => self.d_pos.0 - 1,
+            };
+            if self.curr_char == '\n' {
+                self.d_pos.1 = match self.d_pos.1 {
+                    0 => 0,
+                    _ => self.d_pos.1 - 1,
+                };
+                self.d_pos.0 = self.source.lines().nth(self.d_pos.1).unwrap().len();
+            }
+            self.peek_char = self.curr_char;
+            self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\0')
+        }
+    }
 }
