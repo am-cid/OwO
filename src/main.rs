@@ -1,3 +1,9 @@
+mod lexer;
+
+use lexer::lexer::*;
+
 fn main() {
-    println!("Hello, world!");
+    let source: &'static str = "iwf\newse\newse iwf";
+    let mut lexer = Lexer::new(source);
+    println!("{}", lexer);
 }
