@@ -1,4 +1,4 @@
-use crate::lexer::token::Token;
+use crate::lexer::token::{to_token, Token, TokenType};
 use std::fmt;
 
 pub struct Lexer {
@@ -37,6 +37,15 @@ impl Lexer {
             peek_char: second_char,
             pos: 0,
             d_pos: (0, 0),
+        }
+    }
+    pub fn tokenize(&mut self) -> () {
+        while self.pos < self.source.len() {
+            match self.curr_char {
+                ' ' | '\t' | '\n' => self.advance(1),
+                'c' => self.peek(TokenType::Chan),
+                _ => break,
+            }
         }
     }
     pub fn advance(&mut self, times: usize) -> () {
@@ -78,14 +87,29 @@ impl Lexer {
             self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\0')
         }
     }
-    pub fn peek_str(&mut self, expected: &'static str) -> bool {
-        for i in 0..expected.len() {
-            if self.curr_char != expected.chars().nth(i).unwrap() {
+    pub fn peek(&mut self, expected: TokenType) -> () {
+        let expect_str = expected.to_str();
+        for i in 0..expect_str.len() - 1 {
+            if self.curr_char != expect_str.chars().nth(i).unwrap() {
                 self.reverse(i);
-                return false;
+                return;
             }
             self.advance(1);
         }
-        true
+        if !expected.delims().contains(&self.peek_char) {
+            // TODO: check if identifier/class id, then error
+            self.reverse(expect_str.len() - 1);
+            return;
+        }
+        self.tokens.push(
+            to_token(
+                expect_str,
+                (self.d_pos.1, self.d_pos.0 + 1 - expect_str.len()),
+                (self.d_pos.1, self.d_pos.0),
+            )
+            .map_err(|e| e.to_string())
+            .unwrap(),
+        );
+        self.advance(1);
     }
 }
