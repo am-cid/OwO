@@ -46,9 +46,7 @@ pub enum TokenType {
     // method/property access
     Dot,
     // general symbols
-    DoubleQuote,
     Comma,
-    Pipe,
 
     // keywords
     // general
@@ -72,6 +70,9 @@ pub enum TokenType {
     Bweak,
     // literals
     StringLiteral,
+    StringPartStart,
+    StringPartMid,
+    StringPartEnd,
     IntLiteral,
     FloatLiteral,
     Fax,
