@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
 
+#[derive(Debug)]
 pub enum TokenType {
     // ids
     Identifier,
@@ -96,6 +97,61 @@ impl fmt::Display for TokenType {
 }
 
 impl TokenType {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Self::Chan => "chan",
+            Self::Kun => "kun",
+            Self::Senpai => "senpai",
+            Self::Sama => "sama",
+            Self::San => "san",
+            Self::Concat => "&",
+            Self::Increment => "++",
+            Self::Decrement => "--",
+            Self::Plus => "+",
+            Self::Dash => "-",
+            Self::Multiply => "*",
+            Self::Divide => "/",
+            Self::Modulo => "%",
+            Self::LessThan => "<",
+            Self::LessEqual => "<=",
+            Self::GreaterThan => ">",
+            Self::GreaterEqual => ">=",
+            Self::And => "&&",
+            Self::Or => "||",
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+            Self::Assign => "=",
+            Self::LParen => "(",
+            Self::RParen => ")",
+            Self::LBracket => "[",
+            Self::RBracket => "]",
+            Self::DoubleLBracket => "[[",
+            Self::DoubleRBracket => "]]",
+            Self::LBrace => "{",
+            Self::RBrace => "}",
+            Self::Dot => ".",
+            Self::Comma => ",",
+            Self::Gwobaw => "gwobaw",
+            Self::Mainuwu => "mainuwu",
+            Self::Fwunc => "fwunc",
+            Self::Cwass => "cwass",
+            Self::Wetuwn => "wetuwn",
+            Self::Dono => "dono",
+            Self::Pwint => "pwint",
+            Self::Inpwt => "inpwt",
+            Self::Iwf => "iwf",
+            Self::Ewse => "ewse",
+            Self::EwseIwf => "ewse iwf",
+            Self::Whiwe => "whiwe",
+            Self::DoWhiwe => "do whiwe",
+            Self::Fow => "fow",
+            Self::Bweak => "bweak",
+            Self::Fax => "fax",
+            Self::Cap => "cap",
+            Self::Nuww => "nuww",
+            _ => "\0",
+        }
+    }
     pub fn delims(&self) -> HashSet<char> {
         let mut delim_set = match self {
             Self::Identifier => {
@@ -230,6 +286,7 @@ fn atoms(key: &str) -> HashSet<char> {
     }
 }
 
+#[derive(Debug)]
 pub struct Token {
     kind: TokenType,
     text: &'static str,
