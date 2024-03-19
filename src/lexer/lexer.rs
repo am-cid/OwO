@@ -42,8 +42,47 @@ impl Lexer {
     pub fn tokenize(&mut self) -> () {
         while self.pos < self.source.len() {
             match self.curr_char {
-                ' ' | '\t' | '\n' => self.peek(TokenType::Whitespace),
-                'c' => self.peek(TokenType::Chan),
+                // TODO: remove unwrap or else:
+                //       - do peek_ident instead if starting with a letter
+                //       - do unknown token if anything else
+                ' ' | '\t' | '\n' => self.peek(TokenType::Whitespace).unwrap_or_else(|_| ()),
+                'b' => self.peek(TokenType::Bweak).unwrap_or_else(|_| ()),
+                'c' => self
+                    .peek(TokenType::Chan)
+                    .or(self.peek(TokenType::Cap))
+                    .or(self.peek(TokenType::Cwass))
+                    .unwrap_or_else(|_| ()),
+                'd' => self
+                    .peek(TokenType::Dono)
+                    .or(self.peek(TokenType::DoWhiwe))
+                    .unwrap_or_else(|_| ()),
+                'e' => self
+                    .peek(TokenType::EwseIwf)
+                    .or(self.peek(TokenType::Ewse))
+                    .unwrap_or_else(|_| ()),
+                'f' => self
+                    .peek(TokenType::Fow)
+                    .or(self.peek(TokenType::Fax))
+                    .or(self.peek(TokenType::Fwunc))
+                    .unwrap_or_else(|_| ()),
+                'g' => self.peek(TokenType::Gwobaw).unwrap_or_else(|_| ()),
+                'i' => self
+                    .peek(TokenType::Iwf)
+                    .or(self.peek(TokenType::Inpwt))
+                    .unwrap_or_else(|_| ()),
+                'm' => self.peek(TokenType::Mainuwu).unwrap_or_else(|_| ()),
+                'n' => self.peek(TokenType::Nuww).unwrap_or_else(|_| ()),
+                'p' => self.peek(TokenType::Pwint).unwrap_or_else(|_| ()),
+                's' => self
+                    .peek(TokenType::San)
+                    .or(self.peek(TokenType::Senpai))
+                    .or(self.peek(TokenType::Sama))
+                    .unwrap_or_else(|_| ()),
+                'w' => self
+                    .peek(TokenType::Whiwe)
+                    .or(self.peek(TokenType::Wetuwn))
+                    .unwrap_or_else(|_| ()),
+                // TODO: remove default case
                 _ => break,
             }
         }
@@ -87,19 +126,19 @@ impl Lexer {
             self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\n')
         }
     }
-    pub fn peek(&mut self, expected: TokenType) -> () {
+    pub fn peek(&mut self, expected: TokenType) -> Result<(), ()> {
         let expect_str = expected.to_str();
         for i in 0..expect_str.len() - 1 {
             if self.curr_char != expect_str.chars().nth(i).unwrap() {
                 self.reverse(i);
-                return;
+                return Err(());
             }
             self.advance(1);
         }
         if !expected.delims().contains(&self.peek_char) {
             // TODO: check if identifier/class id, then error
             self.reverse(expect_str.len() - 1);
-            return;
+            return Err(());
         }
         self.tokens.push(
             to_token(
@@ -111,5 +150,6 @@ impl Lexer {
             .unwrap(),
         );
         self.advance(1);
+        Ok(())
     }
 }
