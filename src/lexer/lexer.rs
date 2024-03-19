@@ -42,7 +42,7 @@ impl Lexer {
     pub fn tokenize(&mut self) -> () {
         while self.pos < self.source.len() {
             match self.curr_char {
-                ' ' | '\t' | '\n' => self.advance(1),
+                ' ' | '\t' | '\n' => self.peek(TokenType::Whitespace),
                 'c' => self.peek(TokenType::Chan),
                 _ => break,
             }
