@@ -1,4 +1,4 @@
-use crate::lexer::token::{to_token, Token, TokenType};
+use crate::lexer::token::{atoms, to_token, Token, TokenType};
 use std::fmt;
 
 pub struct Lexer {
@@ -162,8 +162,25 @@ impl Lexer {
         self.advance(1);
         Ok(())
     }
-    fn peek_ident(&self) -> () {
-        todo!()
+    fn peek_ident(&mut self) -> () {
+        let mut tmp: String = "".to_string();
+        while !TokenType::Identifier.delims().contains(&self.curr_char) {
+            if !atoms("alphanum").contains(&self.curr_char) {
+                self.reverse(tmp.len());
+                return;
+            }
+            tmp.push(self.curr_char);
+            self.advance(1);
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(
+                token,
+                (self.d_pos.1, self.d_pos.0 + 1 - token.len()),
+                (self.d_pos.1, self.d_pos.0),
+            )
+            .unwrap(),
+        );
     }
     fn peek_num(&self) -> () {
         todo!()
