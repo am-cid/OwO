@@ -284,7 +284,7 @@ impl TokenType {
     }
 }
 
-fn atoms(key: &str) -> HashSet<char> {
+pub fn atoms(key: &str) -> HashSet<char> {
     match key {
         "num" => ('1'..='9').collect(),
         "number" => ('0'..='9').collect(),
