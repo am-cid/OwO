@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fmt;
-use std::hash::Hash;
 
 #[derive(Debug)]
 pub enum TokenType {
@@ -99,6 +98,19 @@ impl fmt::Display for TokenType {
 impl TokenType {
     pub fn to_str(&self) -> &'static str {
         match self {
+            // non-reserved words/symbols
+            Self::SingleLineComment
+            | Self::MultiLineComment
+            | Self::IntLiteral
+            | Self::FloatLiteral
+            | Self::StringLiteral
+            | Self::Identifier
+            | Self::ClassId
+            | Self::StringPartStart
+            | Self::StringPartMid
+            | Self::StringPartEnd
+            | Self::EOF => "\0",
+            // reserved words/symbols
             Self::Chan => "chan",
             Self::Kun => "kun",
             Self::Senpai => "senpai",
@@ -149,11 +161,12 @@ impl TokenType {
             Self::Fax => "fax",
             Self::Cap => "cap",
             Self::Nuww => "nuww",
-            _ => "\0",
+            Self::Whitespace => " ",
         }
     }
     pub fn delims(&self) -> HashSet<char> {
         let mut delim_set = match self {
+            Self::EOF | Self::Whitespace => atoms("all"),
             Self::Identifier => {
                 let mut res =
                     HashSet::from(['~', ',', '(', ')', '[', ']', '}', '!', '&', '|', '.']);
@@ -164,6 +177,7 @@ impl TokenType {
             Self::Chan | Self::Kun | Self::Senpai | Self::Sama | Self::San => {
                 HashSet::from(['[', ',', '(', ')', '~', '=', '-'])
             }
+            Self::Dono => HashSet::from([',', '(', ')', '=']),
             Self::Concat => HashSet::from(['i', '"']),
             Self::Increment | Self::Decrement => {
                 let mut res = HashSet::from(['|', '~', ')', '!']);
@@ -259,7 +273,6 @@ impl TokenType {
                 res.extend(atoms("alpha"));
                 res
             }
-            _ => HashSet::new(),
         };
         match self {
             Self::SingleLineComment => delim_set,
@@ -282,6 +295,8 @@ fn atoms(key: &str) -> HashSet<char> {
         "arith_op" => HashSet::from(['+', '-', '*', '/', '%']),
         "gen_op" => HashSet::from(['+', '-', '*', '/', '%', '>', '<', '=']),
         "whitespace" => HashSet::from([' ', '\t', '\n']),
+        // all ascii characters (non-extended)
+        "all" => ('\x00'..='\x7F').collect(),
         _ => HashSet::new(),
     }
 }
