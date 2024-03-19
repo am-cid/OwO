@@ -46,42 +46,44 @@ impl Lexer {
                 //       - do peek_ident instead if starting with a letter
                 //       - do unknown token if anything else
                 ' ' | '\t' | '\n' => self.peek(TokenType::Whitespace).unwrap_or_else(|_| ()),
-                'b' => self.peek(TokenType::Bweak).unwrap_or_else(|_| ()),
+                'b' => self.peek(TokenType::Bweak).unwrap_or(self.peek_ident()),
                 'c' => self
                     .peek(TokenType::Chan)
                     .or(self.peek(TokenType::Cap))
                     .or(self.peek(TokenType::Cwass))
-                    .unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
                 'd' => self
                     .peek(TokenType::Dono)
                     .or(self.peek(TokenType::DoWhiwe))
-                    .unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
                 'e' => self
                     .peek(TokenType::EwseIwf)
                     .or(self.peek(TokenType::Ewse))
-                    .unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
                 'f' => self
                     .peek(TokenType::Fow)
                     .or(self.peek(TokenType::Fax))
                     .or(self.peek(TokenType::Fwunc))
-                    .unwrap_or_else(|_| ()),
-                'g' => self.peek(TokenType::Gwobaw).unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
+                'g' => self.peek(TokenType::Gwobaw).unwrap_or(self.peek_ident()),
                 'i' => self
                     .peek(TokenType::Iwf)
                     .or(self.peek(TokenType::Inpwt))
-                    .unwrap_or_else(|_| ()),
-                'm' => self.peek(TokenType::Mainuwu).unwrap_or_else(|_| ()),
-                'n' => self.peek(TokenType::Nuww).unwrap_or_else(|_| ()),
-                'p' => self.peek(TokenType::Pwint).unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
+                'm' => self.peek(TokenType::Mainuwu).unwrap_or(self.peek_ident()),
+                'n' => self.peek(TokenType::Nuww).unwrap_or(self.peek_ident()),
+                'p' => self.peek(TokenType::Pwint).unwrap_or(self.peek_ident()),
                 's' => self
                     .peek(TokenType::San)
                     .or(self.peek(TokenType::Senpai))
                     .or(self.peek(TokenType::Sama))
-                    .unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
                 'w' => self
                     .peek(TokenType::Whiwe)
                     .or(self.peek(TokenType::Wetuwn))
-                    .unwrap_or_else(|_| ()),
+                    .unwrap_or(self.peek_ident()),
+                'a'..='z' => self.peek_ident(),
+                '0'..='9' => self.peek_num(),
                 // TODO: remove default case
                 _ => break,
             }
@@ -151,5 +153,11 @@ impl Lexer {
         );
         self.advance(1);
         Ok(())
+    }
+    fn peek_ident(&self) -> () {
+        todo!()
+    }
+    fn peek_num(&self) -> () {
+        todo!()
     }
 }
