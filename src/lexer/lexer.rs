@@ -19,7 +19,7 @@ impl fmt::Display for Lexer {
         write!(
             f,
             "chars: ('{}','{}')\nat pos: {}(abs), ({}, {})(line, col)\n",
-            self.curr_char, self.peek_char, self.pos, self.d_pos.1, self.d_pos.0
+            self.curr_char, self.peek_char, self.pos, self.d_pos.0, self.d_pos.1
         )
     }
 }
@@ -173,7 +173,6 @@ impl Lexer {
             self.advance(1);
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        println!("{}, {}", self.d_pos.0, self.d_pos.1);
         self.tokens.push(
             to_token(
                 token,
