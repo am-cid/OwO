@@ -104,10 +104,10 @@ impl Lexer {
                 return;
             }
             self.pos += 1;
-            self.d_pos.0 += 1;
+            self.d_pos.1 += 1;
             if self.curr_char == '\n' {
-                self.d_pos.0 = 0;
-                self.d_pos.1 += 1;
+                self.d_pos.1 = 0;
+                self.d_pos.0 += 1;
             }
             self.curr_char = self.peek_char;
             self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\n');
@@ -116,19 +116,19 @@ impl Lexer {
     pub fn reverse(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos == 0 {
-                self.d_pos.0 = 0;
+                self.d_pos.1 = 0;
                 self.curr_char = self.source.chars().nth(0).unwrap_or('\n');
                 return;
             }
             self.pos -= 1;
-            self.d_pos.0 = match self.d_pos.0 {
+            self.d_pos.1 = match self.d_pos.1 {
                 0 => 0,
-                _ => self.d_pos.0 - 1,
+                _ => self.d_pos.1 - 1,
             };
             if self.curr_char == '\n' {
-                self.d_pos.1 = match self.d_pos.1 {
+                self.d_pos.0 = match self.d_pos.0 {
                     0 => 0,
-                    _ => self.d_pos.1 - 1,
+                    _ => self.d_pos.0 - 1,
                 };
                 self.d_pos.0 = self.source.lines().nth(self.d_pos.1).unwrap_or("").len();
             }
@@ -153,8 +153,8 @@ impl Lexer {
         self.tokens.push(
             to_token(
                 expect_str,
-                (self.d_pos.1, self.d_pos.0 + 1 - expect_str.len()),
-                (self.d_pos.1, self.d_pos.0),
+                (self.d_pos.0, self.d_pos.1 + 1 - expect_str.len()),
+                self.d_pos,
             )
             .map_err(|e| e.to_string())
             .unwrap(),
@@ -173,11 +173,12 @@ impl Lexer {
             self.advance(1);
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
+        println!("{}, {}", self.d_pos.0, self.d_pos.1);
         self.tokens.push(
             to_token(
                 token,
-                (self.d_pos.1, self.d_pos.0 + 1 - token.len()),
-                (self.d_pos.1, self.d_pos.0),
+                (self.d_pos.0, self.d_pos.1 + 1 - token.len()),
+                self.d_pos,
             )
             .unwrap(),
         );
