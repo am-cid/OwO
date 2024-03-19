@@ -51,7 +51,7 @@ impl Lexer {
     pub fn advance(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos > self.source.len() - 1 {
-                self.curr_char = '\0';
+                self.curr_char = '\n';
                 return;
             }
             self.pos += 1;
@@ -61,14 +61,14 @@ impl Lexer {
                 self.d_pos.1 += 1;
             }
             self.curr_char = self.peek_char;
-            self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\0');
+            self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\n');
         }
     }
     pub fn reverse(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos == 0 {
                 self.d_pos.0 = 0;
-                self.curr_char = self.source.chars().nth(0).unwrap_or('\0');
+                self.curr_char = self.source.chars().nth(0).unwrap_or('\n');
                 return;
             }
             self.pos -= 1;
@@ -81,10 +81,10 @@ impl Lexer {
                     0 => 0,
                     _ => self.d_pos.1 - 1,
                 };
-                self.d_pos.0 = self.source.lines().nth(self.d_pos.1).unwrap().len();
+                self.d_pos.0 = self.source.lines().nth(self.d_pos.1).unwrap_or("").len();
             }
             self.peek_char = self.curr_char;
-            self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\0')
+            self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\n')
         }
     }
     pub fn peek(&mut self, expected: TokenType) -> () {
