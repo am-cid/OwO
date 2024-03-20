@@ -230,7 +230,7 @@ impl Lexer {
                     self.errors.push(
                         DelimError::new(
                             reserved_to_token_type(expect_str),
-                            expected.delims().into_iter().collect::<Vec<char>>(),
+                            expected.delims(),
                             self.peek_char,
                             self.source.lines().nth(self.d_pos.0).unwrap(),
                             (self.d_pos.0, self.d_pos.1 + 1),
