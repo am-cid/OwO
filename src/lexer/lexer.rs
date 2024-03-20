@@ -219,8 +219,8 @@ impl Lexer {
         }
         if !expected.delims().contains(&self.peek_char) {
             // TODO: check if identifier/class id, then error
-            if atoms("alphanum").contains(&self.peek_char)
-                || !expect_str.chars().all(|c| atoms("alphanum").contains(&c))
+            if atoms("alpha_num").contains(&self.curr_char)
+                || !expect_str.chars().all(|c| atoms("alpha_num").contains(&c))
             {
                 self.reverse(expect_str.len() - 1);
                 return Err(());
@@ -258,7 +258,7 @@ impl Lexer {
         let mut tmp: String = "".to_string();
         let mut times = 0;
         while !delims.contains(&self.curr_char) {
-            if !atoms("alphanum").contains(&self.curr_char) {
+            if !atoms("alpha_num").contains(&self.curr_char) {
                 self.reverse(times);
                 return;
             }

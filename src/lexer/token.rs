@@ -346,7 +346,7 @@ pub fn atoms(key: &str) -> HashSet<char> {
         "alpha_small" => ('a'..='z').collect(),
         "alpha_big" => ('A'..='Z').collect(),
         "alpha" => ('a'..='z').chain('A'..='Z').collect(),
-        "alphanum" => ('a'..='z').chain('A'..='Z').chain('0'..='9').collect(),
+        "alpha_num" => ('a'..='z').chain('A'..='Z').chain('0'..='9').collect(),
         "arith_op" => HashSet::from(['+', '-', '*', '/', '%']),
         "gen_op" => HashSet::from(['+', '-', '*', '/', '%', '>', '<', '=']),
         "whitespace" => HashSet::from([' ', '\t', '\n']),
