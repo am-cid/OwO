@@ -69,7 +69,7 @@ impl CompilerError for DelimError {
             '\n' => "NEWLINE".to_string(),
             '\t' => "TAB".to_string(),
             ' ' => "SPACE".to_string(),
-            _ => format!("'{}'", self.actual),
+            _ => format!("{}", self.actual),
         };
         msg.push_str(format!("    Got: '{}'\n", actual).as_str());
         let line_length = self.line_text.len();
