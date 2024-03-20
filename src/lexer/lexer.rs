@@ -205,13 +205,15 @@ impl Lexer {
             false => TokenType::ClassId.delims(),
         };
         let mut tmp: String = "".to_string();
+        let mut times = 0;
         while !delims.contains(&self.curr_char) {
             if !atoms("alphanum").contains(&self.curr_char) {
-                self.reverse(tmp.len());
+                self.reverse(times);
                 return;
             }
             tmp.push(self.curr_char);
             self.advance(1);
+            times += 1;
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
         self.tokens.push(
