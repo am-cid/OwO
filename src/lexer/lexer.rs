@@ -146,7 +146,7 @@ impl Lexer {
             }
         }
     }
-    pub fn advance(&mut self, times: usize) -> () {
+    fn advance(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos > self.source.len() - 1 {
                 self.curr_char = '\n';
@@ -171,7 +171,7 @@ impl Lexer {
             false => false,
         }
     }
-    pub fn reverse(&mut self, times: usize) -> () {
+    fn reverse(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos == 0 {
                 self.d_pos.1 = 0;
@@ -329,6 +329,9 @@ impl Lexer {
         Ok(())
     }
     fn peek_num(&self) -> () {
+        todo!()
+    }
+    fn peek_string(&self) -> () {
         todo!()
     }
 }
