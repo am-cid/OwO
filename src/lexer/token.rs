@@ -141,6 +141,7 @@ pub fn reserved_to_token_type(text: &str) -> TokenType {
         "whiwe" => TokenType::Whiwe,
         "do whiwe" => TokenType::DoWhiwe,
         "fow" => TokenType::Fow,
+        "bweak" => TokenType::Bweak,
         "fax" => TokenType::Fax,
         "cap" => TokenType::Cap,
         "nuww" => TokenType::Nuww,
@@ -652,6 +653,12 @@ pub fn to_token(
         }),
         "fow" => Ok(Token {
             kind: TokenType::Fow,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "bweak" => Ok(Token {
+            kind: TokenType::Bweak,
             text: text.into(),
             pos,
             end_pos,

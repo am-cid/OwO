@@ -4,7 +4,7 @@ mod lexer;
 use lexer::lexer::*;
 
 fn main() {
-    let source: &'static str = ">//<chan\n|> >//< \"123|1.23?";
+    let source: &'static str = "bweak>//<\n|> >//< \"123|1.23?";
     let mut lexer = Lexer::new(source);
     println!("{}", source);
     println!("{}", lexer);
