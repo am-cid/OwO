@@ -104,12 +104,14 @@ impl Lexer {
                 // TODO: add unknown token error when cannot be unwraped
                 '!' => self.peek(TokenType::NotEqual).unwrap_or_else(|_| ()),
                 '<' => self
-                    .peek(TokenType::LessThan)
-                    .or_else(|_| self.peek(TokenType::LessEqual))
+                    .peek(TokenType::LessEqual)
+                    .or_else(|_| self.peek(TokenType::LessThan))
                     .unwrap_or_else(|_| ()),
                 '>' => self
-                    .peek(TokenType::GreaterThan)
+                    .peek_multi_line_comment()
+                    .or_else(|_| self.peek_single_line_comment())
                     .or_else(|_| self.peek(TokenType::GreaterEqual))
+                    .or_else(|_| self.peek(TokenType::GreaterThan))
                     .unwrap_or_else(|_| ()),
                 '*' => self.peek(TokenType::Multiply).unwrap_or_else(|_| ()),
                 '/' => self.peek(TokenType::Divide).unwrap_or_else(|_| ()),
@@ -233,6 +235,88 @@ impl Lexer {
             )
             .unwrap(),
         );
+    }
+    fn peek_single_line_comment(&mut self) -> Result<(), ()> {
+        let mut tmp: String = "".to_string();
+        if !self.expect_peek('.') {
+            return Err(());
+        }
+        if !self.expect_peek('<') {
+            self.reverse(1); // TODO: add error here, not reverse
+            return Err(());
+        }
+        self.advance(1); // consume the <
+
+        tmp.push_str(">.<");
+        while self.curr_char != '\n' {
+            tmp.push(self.curr_char);
+            self.advance(1);
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(
+                token,
+                (self.d_pos.0, self.d_pos.1 - token.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
+            )
+            .map_err(|e| e.to_string())
+            .unwrap(),
+        );
+        Ok(())
+    }
+    fn peek_multi_line_comment(&mut self) -> Result<(), ()> {
+        let mut tmp: String = "".to_string();
+        let start_pos = (self.d_pos.0, self.d_pos.1);
+        if !self.expect_peek('/') {
+            return Err(());
+        }
+        if !self.expect_peek('/') {
+            self.reverse(1);
+            return Err(());
+        }
+        if !self.expect_peek('<') {
+            self.reverse(2);
+            return Err(());
+        }
+        self.advance(1); // consume the <
+
+        tmp.push_str(">//<");
+        loop {
+            // stop conditions
+            // no closing >//<
+            if self.pos >= self.source.len() - 1 {
+                tmp.push(self.curr_char);
+                break;
+            }
+            // has closing >//<
+            if self.curr_char == '>' {
+                if !self.expect_peek('/') {
+                    tmp.push('>');
+                    continue;
+                }
+                if !self.expect_peek('/') {
+                    println!("{}", self.peek_char);
+                    tmp.push_str(">/");
+                    continue;
+                }
+                if !self.expect_peek('<') {
+                    tmp.push_str(">//");
+                    continue;
+                }
+                tmp.push_str(">//<");
+                break;
+            }
+            tmp.push(self.curr_char);
+            self.advance(1)
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(token, start_pos, self.d_pos)
+                .map_err(|e| e.to_string())
+                .unwrap(),
+        );
+        self.advance(1);
+        Ok(())
     }
     fn peek_num(&self) -> () {
         todo!()

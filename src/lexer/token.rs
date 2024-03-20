@@ -661,6 +661,12 @@ pub fn to_token(
             pos,
             end_pos,
         }),
+        _ if text.starts_with(r#">//<"#) => Ok(Token {
+            kind: TokenType::MultiLineComment,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
         _ => Err(format!("Unknown token: {}", text)),
     }
 }
