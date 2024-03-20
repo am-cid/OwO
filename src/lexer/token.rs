@@ -692,6 +692,32 @@ pub fn to_token(
             pos,
             end_pos,
         }),
+        _ if text.chars().nth(0) == Some('"') => {
+            let token_type = match text.chars().last() {
+                Some('"') => TokenType::StringLiteral,
+                Some('|') => TokenType::StringPartStart,
+                _ => TokenType::StringLiteral,
+            };
+            Ok(Token {
+                kind: token_type,
+                text: text.into(),
+                pos,
+                end_pos,
+            })
+        }
+        _ if text.chars().nth(0) == Some('|') => {
+            let token_type = match text.chars().last() {
+                Some('"') => TokenType::StringPartEnd,
+                Some('|') => TokenType::StringPartMid,
+                _ => TokenType::StringPartEnd,
+            };
+            Ok(Token {
+                kind: token_type,
+                text: text.into(),
+                pos,
+                end_pos,
+            })
+        }
         _ if text.starts_with(|c: char| c.is_alphabetic() && c.is_lowercase()) => Ok(Token {
             kind: TokenType::Identifier,
             text: text.into(),
