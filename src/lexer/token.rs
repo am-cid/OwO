@@ -370,6 +370,22 @@ impl fmt::Display for Token {
     }
 }
 
+impl Token {
+    pub fn new(
+        kind: TokenType,
+        text: &'static str,
+        pos: (usize, usize),
+        end_pos: (usize, usize),
+    ) -> Self {
+        Self {
+            kind,
+            text,
+            pos,
+            end_pos,
+        }
+    }
+}
+
 pub fn to_token(
     text: &'static str,
     pos: (usize, usize),
