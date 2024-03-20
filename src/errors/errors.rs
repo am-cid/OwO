@@ -54,7 +54,7 @@ impl CompilerError for DelimError {
             )
             .as_str(),
         );
-        msg.push_str(format!("    Got: {}\n", self.actual).as_str());
+        msg.push_str(format!("    Got: '{}'\n", self.actual).as_str());
         let line_length = self.line_text.len();
         let border = "-".repeat(line_length);
         let highlight = " ".repeat(self.pos.1) + "^";
