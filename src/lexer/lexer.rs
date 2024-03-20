@@ -93,7 +93,7 @@ impl Lexer {
                     .or_else(|_| self.peek_reserved(TokenType::Wetuwn))
                     .unwrap_or_else(|_| self.peek_ident()),
                 'a'..='z' | 'A'..='Z' => self.peek_ident(),
-                '0'..='9' => self.peek_num(),
+                '0'..='9' => self.peek_int(),
                 // TODO: peek string part mid/end instead of unit for pipe |
                 '|' => self.peek_reserved(TokenType::Or).unwrap_or_else(|_| ()),
                 '&' => self.peek_reserved(TokenType::And).unwrap_or_else(|_| ()),
@@ -357,17 +357,67 @@ impl Lexer {
         self.advance(1);
         Ok(())
     }
-    fn peek_num(&mut self) -> () {
+    fn peek_int(&mut self) -> () {
         let mut tmp: String = "".to_string();
         while atoms("number").contains(&self.curr_char) {
             tmp.push(self.curr_char);
             self.advance(1);
+        }
+        if self.curr_char == '.' {
+            return self.peek_float(tmp);
         }
         if !TokenType::IntLiteral.delims().contains(&self.curr_char) {
             self.errors.push(
                 DelimError::new(
                     TokenType::IntLiteral,
                     TokenType::IntLiteral.delims(),
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            );
+            return;
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(
+                token,
+                (self.d_pos.0, self.d_pos.1 - token.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
+            )
+            .map_err(|e| e.to_string())
+            .unwrap(),
+        );
+    }
+    /// must be called after peek_int since it requires the digits before the .
+    fn peek_float(&mut self, before: String) -> () {
+        let mut tmp = before;
+        tmp.push('.');
+        self.advance(1); // consume the .
+        if !atoms("number").contains(&self.curr_char) {
+            self.errors.push(
+                DelimError::new(
+                    TokenType::FloatLiteral,
+                    atoms("number"),
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            );
+            return;
+        }
+        while atoms("number").contains(&self.curr_char) {
+            tmp.push(self.curr_char);
+            self.advance(1);
+        }
+        // wrong delimiter
+        if !TokenType::FloatLiteral.delims().contains(&self.curr_char) {
+            self.errors.push(
+                DelimError::new(
+                    TokenType::FloatLiteral,
+                    TokenType::FloatLiteral.delims(),
                     self.curr_char,
                     self.source.lines().nth(self.d_pos.0).unwrap(),
                     self.d_pos,
