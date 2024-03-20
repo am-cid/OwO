@@ -333,14 +333,17 @@ impl Lexer {
             if self.curr_char == '>' {
                 if !self.expect_peek_char_is('/') {
                     tmp.push('>');
+                    self.advance(1);
                     continue;
                 }
                 if !self.expect_peek_char_is('/') {
                     tmp.push_str(">/");
+                    self.advance(1);
                     continue;
                 }
                 if !self.expect_peek_char_is('<') {
                     tmp.push_str(">//");
+                    self.advance(1);
                     continue;
                 }
                 tmp.push_str(">//<");
