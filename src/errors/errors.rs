@@ -34,7 +34,18 @@ impl DelimError {
 impl CompilerError for DelimError {
     fn message(&self) -> String {
         let mut msg: String = "".to_string();
-        msg.push_str(format!("[UNDELIMITED {}]", self.token_type.to_str()).as_str());
+        let title = match self.token_type {
+            TokenType::FloatLiteral => "FLOAT LITERAL",
+            TokenType::IntLiteral => "INTEGER LITERAL",
+            TokenType::StringLiteral => "STRING LITERAL",
+            TokenType::Identifier => "IDENTIFIER",
+            TokenType::ClassId => "CLASS ID",
+            TokenType::StringPartStart => "STRING PART START",
+            TokenType::StringPartMid => "STRING PART MID",
+            TokenType::StringPartEnd => "STRING PART END",
+            _ => self.token_type.to_str(),
+        };
+        msg.push_str(format!("[UNDELIMITED {}]", title).as_str());
         msg.push_str(format!(" at line {}, col {}\n", self.pos.0, self.pos.1).as_str());
         msg.push_str(
             format!(
@@ -54,7 +65,13 @@ impl CompilerError for DelimError {
             )
             .as_str(),
         );
-        msg.push_str(format!("    Got: '{}'\n", self.actual).as_str());
+        let actual = match self.actual {
+            '\n' => "NEWLINE".to_string(),
+            '\t' => "TAB".to_string(),
+            ' ' => "SPACE".to_string(),
+            _ => format!("'{}'", self.actual),
+        };
+        msg.push_str(format!("    Got: '{}'\n", actual).as_str());
         let line_length = self.line_text.len();
         let border = "-".repeat(line_length);
         let highlight = " ".repeat(self.pos.1) + "^";
