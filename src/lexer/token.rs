@@ -96,6 +96,58 @@ impl fmt::Display for TokenType {
     }
 }
 
+pub fn reserved_to_token_type(text: &str) -> TokenType {
+    match text {
+        "chan" => TokenType::Chan,
+        "kun" => TokenType::Kun,
+        "senpai" => TokenType::Senpai,
+        "sama" => TokenType::Sama,
+        "san" => TokenType::San,
+        "&" => TokenType::Concat,
+        "++" => TokenType::Increment,
+        "--" => TokenType::Decrement,
+        "+" => TokenType::Plus,
+        "-" => TokenType::Dash,
+        "*" => TokenType::Divide,
+        "%" => TokenType::Modulo,
+        "<" => TokenType::LessThan,
+        "<=" => TokenType::LessEqual,
+        "&&" => TokenType::And,
+        "||" => TokenType::Or,
+        "==" => TokenType::Equal,
+        "!=" => TokenType::NotEqual,
+        "=" => TokenType::Assign,
+        "(" => TokenType::LParen,
+        ")" => TokenType::RParen,
+        "[" => TokenType::LBracket,
+        "]" => TokenType::RBracket,
+        "[[" => TokenType::DoubleLBracket,
+        "]]" => TokenType::DoubleRBracket,
+        "{" => TokenType::LBrace,
+        "}" => TokenType::RBrace,
+        "." => TokenType::Dot,
+        "," => TokenType::Comma,
+        "gwobaw" => TokenType::Gwobaw,
+        "mainuwu" => TokenType::Mainuwu,
+        "fwunc" => TokenType::Fwunc,
+        "cwass" => TokenType::Cwass,
+        "wetuwn" => TokenType::Wetuwn,
+        "dono" => TokenType::Dono,
+        "pwint" => TokenType::Pwint,
+        "inpwt" => TokenType::Inpwt,
+        "iwf" => TokenType::Iwf,
+        "ewse" => TokenType::Ewse,
+        "ewse iwf" => TokenType::EwseIwf,
+        "whiwe" => TokenType::Whiwe,
+        "do whiwe" => TokenType::DoWhiwe,
+        "fow" => TokenType::Fow,
+        "fax" => TokenType::Fax,
+        "cap" => TokenType::Cap,
+        "nuww" => TokenType::Nuww,
+        _ => TokenType::EOF,
+    }
+}
+
 impl TokenType {
     pub fn to_str(&self) -> &'static str {
         match self {
