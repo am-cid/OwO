@@ -219,8 +219,27 @@ impl Lexer {
         }
         if !expected.delims().contains(&self.peek_char) {
             // TODO: check if identifier/class id, then error
-            self.reverse(expect_str.len() - 1);
-            return Err(());
+            match atoms("alphanum").contains(&self.peek_char)
+                || !expect_str.chars().all(|c| atoms("alphanum").contains(&c))
+            {
+                true => {
+                    self.reverse(expect_str.len() - 1);
+                    return Err(());
+                }
+                false => {
+                    self.errors.push(
+                        DelimError::new(
+                            reserved_to_token_type(expect_str),
+                            expected.delims().into_iter().collect::<Vec<char>>(),
+                            self.peek_char,
+                            self.source.lines().nth(self.d_pos.0).unwrap(),
+                            (self.d_pos.0, self.d_pos.1 + 1),
+                        )
+                        .message(),
+                    );
+                    self.advance(1);
+                }
+            }
         }
         self.tokens.push(
             to_token(
