@@ -1,0 +1,65 @@
+use crate::lexer::token::TokenType;
+
+pub trait CompilerError {
+    fn message(&self) -> String;
+}
+
+pub struct DelimError {
+    token_type: TokenType,
+    expected: Vec<char>,
+    actual: char,
+    line_text: &'static str,
+    pos: (usize, usize),
+}
+impl DelimError {
+    pub fn new(
+        token_type: TokenType,
+        expected: Vec<char>,
+        actual: char,
+        line_text: &'static str,
+        pos: (usize, usize),
+    ) -> Self {
+        Self {
+            token_type,
+            expected,
+            actual,
+            line_text,
+            pos,
+        }
+    }
+}
+
+impl CompilerError for DelimError {
+    fn message(&self) -> String {
+        let mut msg: String = "".to_string();
+        msg.push_str(format!("[UNDELIMITED {}]", self.token_type.to_str()).as_str());
+        msg.push_str(format!(" at line {}, col {}\n", self.pos.0, self.pos.1).as_str());
+        msg.push_str(
+            format!(
+                "    Expected any in: {}\n",
+                self.expected
+                    .iter()
+                    .map(|&c| {
+                        match c {
+                            '\n' => "'NEWLINE'".to_string(),
+                            '\t' => "'TAB'".to_string(),
+                            ' ' => "'SPACE'".to_string(),
+                            _ => format!("'{}'", c),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+            .as_str(),
+        );
+        msg.push_str(format!("    Got: {}\n", self.actual).as_str());
+        let line_length = self.line_text.len();
+        let border = "-".repeat(line_length);
+        let highlight = " ".repeat(self.pos.1) + "^";
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
+        msg.push_str(format!("    | {}\n", highlight).as_str());
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg
+    }
+}
