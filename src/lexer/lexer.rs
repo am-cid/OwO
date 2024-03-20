@@ -213,15 +213,14 @@ impl Lexer {
     }
     fn peek_reserved(&mut self, expected: TokenType) -> Result<(), ()> {
         let expect_str = expected.to_str();
-        for i in 0..expect_str.len() - 1 {
-            if self.curr_char != expect_str.chars().nth(i).unwrap() {
+        for i in 0..expect_str.len() {
+            if self.curr_char != expect_str.chars().nth(i).unwrap_or('\n') {
                 self.reverse(i);
                 return Err(());
             }
             self.advance(1);
         }
-        if !expected.delims().contains(&self.peek_char) {
-            // TODO: check if identifier/class id, then error
+        if !expected.delims().contains(&self.curr_char) {
             if atoms("alpha_num").contains(&self.curr_char)
                 || !expect_str.chars().all(|c| atoms("alpha_num").contains(&c))
             {
@@ -232,20 +231,19 @@ impl Lexer {
                 DelimError::new(
                     reserved_to_token_type(expect_str),
                     expected.delims(),
-                    self.peek_char,
+                    self.curr_char,
                     self.source.lines().nth(self.d_pos.0).unwrap(),
-                    (self.d_pos.0, self.d_pos.1 + 1),
+                    self.d_pos,
                 )
                 .message(),
             );
-            self.advance(1);
             return Err(());
         }
         self.tokens.push(
             to_token(
                 expect_str,
-                (self.d_pos.0, self.d_pos.1 + 1 - expect_str.len()),
-                self.d_pos,
+                (self.d_pos.0, self.d_pos.1 - expect_str.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
             )
             .map_err(|e| e.to_string())
             .unwrap(),
