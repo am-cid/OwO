@@ -215,8 +215,8 @@ impl Lexer {
         self.tokens.push(
             to_token(
                 token,
-                (self.d_pos.0, self.d_pos.1 + 1 - token.len()),
-                self.d_pos,
+                (self.d_pos.0, self.d_pos.1 - token.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
             )
             .unwrap(),
         );
