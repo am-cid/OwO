@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::lexer::token::TokenType;
 
 pub trait CompilerError {
@@ -6,7 +8,7 @@ pub trait CompilerError {
 
 pub struct DelimError {
     token_type: TokenType,
-    expected: Vec<char>,
+    expected: HashSet<char>,
     actual: char,
     line_text: &'static str,
     pos: (usize, usize),
@@ -14,7 +16,7 @@ pub struct DelimError {
 impl DelimError {
     pub fn new(
         token_type: TokenType,
-        expected: Vec<char>,
+        expected: HashSet<char>,
         actual: char,
         line_text: &'static str,
         pos: (usize, usize),
