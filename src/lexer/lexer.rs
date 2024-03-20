@@ -88,9 +88,7 @@ impl Lexer {
                     .peek(TokenType::Whiwe)
                     .or_else(|_| self.peek(TokenType::Wetuwn))
                     .unwrap_or_else(|_| self.peek_ident()),
-                'a'..='z' => {
-                    self.peek_ident();
-                }
+                'a'..='z' | 'A'..='Z' => self.peek_ident(),
                 '0'..='9' => self.peek_num(),
                 // TODO: peek string part mid/end instead of unit for pipe |
                 '|' => self.peek(TokenType::Or).unwrap_or_else(|_| ()),
@@ -202,8 +200,12 @@ impl Lexer {
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
+        let delims = match self.curr_char.is_lowercase() {
+            true => TokenType::Identifier.delims(),
+            false => TokenType::ClassId.delims(),
+        };
         let mut tmp: String = "".to_string();
-        while !TokenType::Identifier.delims().contains(&self.curr_char) {
+        while !delims.contains(&self.curr_char) {
             if !atoms("alphanum").contains(&self.curr_char) {
                 self.reverse(tmp.len());
                 return;
