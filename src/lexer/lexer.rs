@@ -335,7 +335,6 @@ impl Lexer {
                     continue;
                 }
                 if !self.expect_peek_char_is('/') {
-                    println!("{}", self.peek_char);
                     tmp.push_str(">/");
                     continue;
                 }
@@ -358,8 +357,35 @@ impl Lexer {
         self.advance(1);
         Ok(())
     }
-    fn peek_num(&self) -> () {
-        todo!()
+    fn peek_num(&mut self) -> () {
+        let mut tmp: String = "".to_string();
+        while atoms("number").contains(&self.curr_char) {
+            tmp.push(self.curr_char);
+            self.advance(1);
+        }
+        if !TokenType::IntLiteral.delims().contains(&self.curr_char) {
+            self.errors.push(
+                DelimError::new(
+                    TokenType::IntLiteral,
+                    TokenType::IntLiteral.delims(),
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            );
+            return;
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(
+                token,
+                (self.d_pos.0, self.d_pos.1 - token.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
+            )
+            .map_err(|e| e.to_string())
+            .unwrap(),
+        );
     }
     fn peek_string(&self) -> () {
         todo!()
