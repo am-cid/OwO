@@ -94,8 +94,11 @@ impl Lexer {
                     .unwrap_or_else(|_| self.peek_ident()),
                 'a'..='z' | 'A'..='Z' => self.peek_ident(),
                 '0'..='9' => self.peek_int(),
+                '"' => self.peek_string(),
                 // TODO: peek string part mid/end instead of unit for pipe |
-                '|' => self.peek_reserved(TokenType::Or).unwrap_or_else(|_| ()),
+                '|' => self
+                    .peek_reserved(TokenType::Or)
+                    .unwrap_or_else(|_| self.peek_string()),
                 '&' => self.peek_reserved(TokenType::And).unwrap_or_else(|_| ()),
                 '=' => self
                     .peek_reserved(TokenType::Equal)
@@ -437,7 +440,71 @@ impl Lexer {
             .unwrap(),
         );
     }
-    fn peek_string(&self) -> () {
-        todo!()
+    fn peek_string(&mut self) -> () {
+        let mut tmp: String = self.curr_char.to_string();
+        self.advance(1); // consume the " or |
+        let closing: Vec<char> = vec!['"', '|'];
+        while !closing.contains(&self.curr_char) {
+            if self.curr_char == '\n' {
+                let token_type = match tmp.chars().nth(0).unwrap_or('\n') {
+                    '"' => TokenType::StringLiteral,
+                    '|' => TokenType::StringPartMid,
+                    _ => unreachable!(),
+                };
+                let expected_delims = token_type.delims();
+                self.errors.push(
+                    DelimError::new(
+                        token_type,
+                        expected_delims,
+                        self.curr_char,
+                        self.source.lines().nth(self.d_pos.0).unwrap(),
+                        self.d_pos,
+                    )
+                    .message(),
+                );
+                return;
+            }
+            tmp.push(self.curr_char);
+            self.advance(1);
+        }
+        tmp.push(self.curr_char);
+        let delims = match self.curr_char {
+            '"' => TokenType::StringLiteral.delims(),
+            '|' => TokenType::StringPartMid.delims(),
+            _ => unreachable!(),
+        };
+        let token_type = match (
+            tmp.chars().nth(0).unwrap_or('\n'),
+            tmp.chars().last().unwrap_or('\n'),
+        ) {
+            ('"', '"') => TokenType::StringLiteral,
+            ('"', '|') => TokenType::StringPartStart,
+            ('|', '|') => TokenType::StringPartMid,
+            ('|', '"') => TokenType::StringPartEnd,
+            _ => unreachable!(),
+        };
+        self.advance(1); // consume the closing " or |
+        if !delims.contains(&self.curr_char) {
+            self.errors.push(
+                DelimError::new(
+                    token_type,
+                    delims,
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            )
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(
+            to_token(
+                token,
+                (self.d_pos.0, self.d_pos.1 - token.len()),
+                (self.d_pos.0, self.d_pos.1 - 1),
+            )
+            .map_err(|e| e.to_string())
+            .unwrap(),
+        )
     }
 }

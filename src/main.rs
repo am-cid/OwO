@@ -4,7 +4,7 @@ mod lexer;
 use lexer::lexer::*;
 
 fn main() {
-    let source: &'static str = "_ ! _ chan| 123 1.";
+    let source: &'static str = "chan| \"123|1.23?";
     let mut lexer = Lexer::new(source);
     println!("{}", source);
     println!("{}", lexer);
