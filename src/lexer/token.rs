@@ -317,3 +317,350 @@ impl fmt::Display for Token {
         write!(f, "{} of type {}", self.text, self.kind)
     }
 }
+
+pub fn to_token(
+    text: &'static str,
+    pos: (usize, usize),
+    end_pos: (usize, usize),
+) -> Result<Token, String> {
+    match text {
+        "chan" => Ok(Token {
+            kind: TokenType::Chan,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "kun" => Ok(Token {
+            kind: TokenType::Kun,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "senpai" => Ok(Token {
+            kind: TokenType::Senpai,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "sama" => Ok(Token {
+            kind: TokenType::Sama,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "san" => Ok(Token {
+            kind: TokenType::San,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "&" => Ok(Token {
+            kind: TokenType::Concat,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "++" => Ok(Token {
+            kind: TokenType::Increment,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "--" => Ok(Token {
+            kind: TokenType::Decrement,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "+" => Ok(Token {
+            kind: TokenType::Plus,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "-" => Ok(Token {
+            kind: TokenType::Dash,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "*" => Ok(Token {
+            kind: TokenType::Multiply,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "/" => Ok(Token {
+            kind: TokenType::Divide,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "%" => Ok(Token {
+            kind: TokenType::Modulo,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "<" => Ok(Token {
+            kind: TokenType::LessThan,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "<=" => Ok(Token {
+            kind: TokenType::LessEqual,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "&&" => Ok(Token {
+            kind: TokenType::And,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "||" => Ok(Token {
+            kind: TokenType::Or,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "==" => Ok(Token {
+            kind: TokenType::Equal,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "!=" => Ok(Token {
+            kind: TokenType::NotEqual,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "=" => Ok(Token {
+            kind: TokenType::Assign,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "(" => Ok(Token {
+            kind: TokenType::LParen,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        ")" => Ok(Token {
+            kind: TokenType::RParen,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "[" => Ok(Token {
+            kind: TokenType::LBracket,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "]" => Ok(Token {
+            kind: TokenType::RBracket,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "[[" => Ok(Token {
+            kind: TokenType::DoubleLBracket,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "]]" => Ok(Token {
+            kind: TokenType::DoubleRBracket,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "{" => Ok(Token {
+            kind: TokenType::LBrace,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "}" => Ok(Token {
+            kind: TokenType::RBrace,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "." => Ok(Token {
+            kind: TokenType::Dot,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "," => Ok(Token {
+            kind: TokenType::Comma,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "gwobaw" => Ok(Token {
+            kind: TokenType::Gwobaw,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "mainuwu" => Ok(Token {
+            kind: TokenType::Mainuwu,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "fwunc" => Ok(Token {
+            kind: TokenType::Fwunc,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "cwass" => Ok(Token {
+            kind: TokenType::Cwass,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "wetuwn" => Ok(Token {
+            kind: TokenType::Wetuwn,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "dono" => Ok(Token {
+            kind: TokenType::Dono,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "pwint" => Ok(Token {
+            kind: TokenType::Pwint,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "inpwt" => Ok(Token {
+            kind: TokenType::Inpwt,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "iwf" => Ok(Token {
+            kind: TokenType::Iwf,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "ewse" => Ok(Token {
+            kind: TokenType::Ewse,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "ewse iwf" => Ok(Token {
+            kind: TokenType::EwseIwf,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "whiwe" => Ok(Token {
+            kind: TokenType::Whiwe,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "do whiwe" => Ok(Token {
+            kind: TokenType::DoWhiwe,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "fow" => Ok(Token {
+            kind: TokenType::Fow,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "fax" => Ok(Token {
+            kind: TokenType::Fax,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "cap" => Ok(Token {
+            kind: TokenType::Cap,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "nuww" => Ok(Token {
+            kind: TokenType::Nuww,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        ">.<" => Ok(Token {
+            kind: TokenType::SingleLineComment,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        r#">//<"# => Ok(Token {
+            kind: TokenType::MultiLineComment,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        " " | "\t" | "\n" => Ok(Token {
+            kind: TokenType::Whitespace,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        _ if text.starts_with(|c: char| c.is_alphabetic() && c.is_lowercase()) => Ok(Token {
+            kind: TokenType::Identifier,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        _ if text.starts_with(|c: char| c.is_alphanumeric() && c.is_uppercase()) => Ok(Token {
+            kind: TokenType::ClassId,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        _ if text.chars().all(|c| c.is_numeric()) => Ok(Token {
+            kind: TokenType::IntLiteral,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        _ if text.starts_with(|c: char| c.is_numeric()) &&
+            text.chars().skip(1).all(|c| c.is_numeric() || c == '.') &&
+            text.chars().last() != Some('.') &&
+            // check if only one . exists
+            text.chars().filter(|c| *c == '.').count() == 1 =>
+        {
+            Ok(Token {
+                kind: TokenType::FloatLiteral,
+                text: text.into(),
+                pos,
+                end_pos,
+            })
+        }
+        _ if text.starts_with(">.<") => Ok(Token {
+            kind: TokenType::SingleLineComment,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        _ => Err(format!("Unknown token: {}", text)),
+    }
+}
