@@ -1,4 +1,5 @@
-use crate::lexer::token::{atoms, to_token, Token, TokenType};
+use crate::errors::errors::{CompilerError, DelimError, UnknownTokenError};
+use crate::lexer::token::{atoms, reserved_to_token_type, to_token, Token, TokenType};
 use std::fmt;
 
 pub struct Lexer {
@@ -42,8 +43,6 @@ impl Lexer {
     pub fn tokenize(&mut self) -> () {
         while self.pos < self.source.len() {
             match self.curr_char {
-                // TODO: remove unwrap or else:
-                //       - do unknown token if anything else
                 ' ' | '\t' | '\n' => self
                     .peek_reserved(TokenType::Whitespace)
                     .unwrap_or_else(|_| ()),
@@ -106,9 +105,16 @@ impl Lexer {
                     .peek_reserved(TokenType::Decrement)
                     .or_else(|_| self.peek_reserved(TokenType::Dash))
                     .unwrap_or_else(|_| ()),
-                '!' => self
-                    .peek_reserved(TokenType::NotEqual)
-                    .unwrap_or_else(|_| ()),
+                '!' => self.peek_reserved(TokenType::NotEqual).unwrap_or_else(|_| {
+                    self.errors.push(
+                        UnknownTokenError::new(
+                            self.source.lines().nth(self.d_pos.0).unwrap(),
+                            self.d_pos,
+                        )
+                        .message(),
+                    );
+                    self.advance(1);
+                }),
                 '<' => self
                     .peek_reserved(TokenType::LessEqual)
                     .or_else(|_| self.peek_reserved(TokenType::LessThan))
@@ -141,8 +147,16 @@ impl Lexer {
                 '~' => self
                     .peek_reserved(TokenType::Terminator)
                     .unwrap_or_else(|_| ()),
-                // TODO: remove default case
-                _ => break,
+                _ => {
+                    self.errors.push(
+                        UnknownTokenError::new(
+                            self.source.lines().nth(self.d_pos.0).unwrap(),
+                            self.d_pos,
+                        )
+                        .message(),
+                    );
+                    self.advance(1);
+                }
             }
         }
     }
