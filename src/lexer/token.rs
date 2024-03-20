@@ -49,6 +49,7 @@ pub enum TokenType {
     Dot,
     // general symbols
     Comma,
+    Terminator,
 
     // keywords
     // general
@@ -143,6 +144,7 @@ impl TokenType {
             Self::RBrace => "}",
             Self::Dot => ".",
             Self::Comma => ",",
+            Self::Terminator => "~",
             Self::Gwobaw => "gwobaw",
             Self::Mainuwu => "mainuwu",
             Self::Fwunc => "fwunc",
@@ -245,6 +247,7 @@ impl TokenType {
                 res.extend(atoms("alpha_num"));
                 res
             }
+            Self::Terminator => atoms("all"),
             Self::Mainuwu | Self::Wetuwn | Self::Inpwt | Self::Pwint => HashSet::from(['-']),
             Self::Gwobaw | Self::Fwunc | Self::Cwass => HashSet::new(),
             Self::Iwf | Self::Ewse | Self::EwseIwf | Self::Whiwe | Self::DoWhiwe | Self::Fow => {
