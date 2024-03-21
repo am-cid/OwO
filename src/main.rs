@@ -2,7 +2,7 @@ mod cli;
 mod errors;
 mod lexer;
 
-use cli::command::{tokenize, Command};
+use cli::commands::{tokenize, Command};
 use std::env;
 
 fn main() {
