@@ -1,11 +1,7 @@
 use crate::cli::help;
 
-pub trait Command {
-    fn parse(&self) -> Result<(), String>;
-    fn exec(&self) -> Result<(), String>;
-    fn help_msg(&self, verbose: bool) -> String;
-}
-pub fn to_command(
+// Put commands here
+fn to_command(
     name: String,
     arg: String,
     flags: Option<Vec<String>>,
@@ -30,4 +26,9 @@ pub fn tokenize(args: Vec<String>) -> Result<impl Command, String> {
         _ => Some(args_iter.collect()),
     };
     to_command(command, arg, flags)
+}
+pub trait Command {
+    fn help_msg(&self, verbose: bool) -> String;
+    fn parse(&self) -> Result<(), String>;
+    fn exec(&self) -> Result<(), String>;
 }
