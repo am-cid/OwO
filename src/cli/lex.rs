@@ -1,10 +1,10 @@
 use crate::cli::command::Command;
 
-pub struct HelpCommand {
+pub struct LexCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for HelpCommand {
+impl Command for LexCommand {
     fn help_msg(&self, verbose: bool) -> String {
         todo!()
     }
