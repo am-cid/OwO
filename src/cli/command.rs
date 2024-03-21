@@ -13,8 +13,8 @@ pub fn to_command(
     match name.as_str() {
         "help" | "" => Ok(help::HelpCommand { arg, flags }),
         "version" => todo!(),
-        "lexer" => todo!(),
-        "parser" => todo!(),
+        "lex" => todo!(),
+        "parse" => todo!(),
         "analyze" => todo!(),
         "compile" => todo!(),
         "run" => todo!(),
