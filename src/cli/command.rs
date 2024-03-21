@@ -3,6 +3,7 @@ use crate::cli::help;
 pub trait Command {
     fn parse(&self) -> Result<(), String>;
     fn exec(&self) -> Result<(), String>;
+    fn help_msg(&self, verbose: bool) -> String;
 }
 pub fn to_command(
     name: String,
