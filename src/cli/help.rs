@@ -9,15 +9,10 @@ pub struct HelpCommand {
 }
 impl Command for HelpCommand {
     fn help_msg(verbose: bool) {
-        let title = match verbose {
-            true => "help"
-                .to_string()
-                .pad_right(15)
-                .fill_left(2)
-                .bold()
-                .underline(),
-            false => "help".to_string().pad_right(15).fill_left(2).bold(),
-        };
+        let mut title = "help".to_string().pad_right(15).fill_left(2).bold();
+        if verbose {
+            title = title.underline();
+        }
         println!("{}{}", title, "prints this help message or the verbose");
         println!(
             "{}{}\n",
