@@ -1,4 +1,4 @@
-use crate::cli::commands::Command;
+use crate::cli::{commands::Command, styling::StringExt};
 
 pub struct VersionCommand {
     pub arg: String,
@@ -6,12 +6,37 @@ pub struct VersionCommand {
 }
 impl Command for VersionCommand {
     fn help_msg(verbose: bool) {
-        todo!()
+        let mut title = "version".to_string().pad_right(15).fill_left(2).bold();
+        if verbose {
+            title = title.underline();
+        }
+        println!(
+            "{}{}{}",
+            title,
+            "prints the current version of",
+            " sgr".to_string().bold()
+        );
+        if verbose {
+            println!(
+                "\n{}{}",
+                "Usage:"
+                    .to_string()
+                    .pad_right(15)
+                    .bold()
+                    .underline()
+                    .fill_left(2),
+                "sgr version".to_string()
+            );
+        }
     }
     fn parse(&self) -> Result<(), String> {
-        todo!()
+        match self.arg.as_str() {
+            "" => Ok(()),
+            _ => Err(format!("'version' takes no arguments, got '{}'", self.arg)),
+        }
     }
     fn exec(&self) -> Result<(), String> {
-        todo!()
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        Ok(())
     }
 }
