@@ -11,4 +11,7 @@ impl Command for HelpCommand {
     fn exec(&self) -> Result<(), String> {
         todo!()
     }
+    fn help_msg(&self, verbose: bool) -> String {
+        todo!()
+    }
 }
