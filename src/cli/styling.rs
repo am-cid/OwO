@@ -12,7 +12,7 @@ pub trait StringExt {
     fn italic(&self) -> String;
 }
 
-pub impl StringExt for String {
+impl StringExt for String {
     fn pad_right(&self, len: usize) -> String {
         let width = match len < self.len() {
             true => 0,
