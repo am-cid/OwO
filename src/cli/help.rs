@@ -9,8 +9,6 @@ pub struct HelpCommand {
 }
 impl Command for HelpCommand {
     fn help_msg(verbose: bool) {
-        // H = cursor to top left, 2J = clear screen
-        print!("\x1B[H\x1B[2J");
         let title = match verbose {
             true => "help"
                 .to_string()
@@ -43,6 +41,8 @@ impl Command for HelpCommand {
         }
     }
     fn exec(&self) -> Result<(), String> {
+        // H = cursor to top left, 2J = clear screen
+        print!("\x1B[H\x1B[2J");
         match self.arg.as_str() {
             "" => {
                 println!(
