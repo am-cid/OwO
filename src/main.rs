@@ -1,19 +1,14 @@
+mod cli;
 mod errors;
 mod lexer;
 
-use lexer::lexer::*;
+use cli::command::{tokenize, Command};
+use std::env;
 
 fn main() {
-    let source: &'static str = "bweak>//<\n|> >//< \"123|1.23?";
-    let mut lexer = Lexer::new(source);
-    println!("{}", source);
-    println!("{}", lexer);
-    lexer.tokenize();
-    println!("{}", lexer);
-    for token in lexer.tokens {
-        println!("{:?}", token);
-    }
-    for error in lexer.errors {
-        println!("{}", error);
-    }
+    let os_args: Vec<String> = env::args().collect();
+    tokenize(os_args)
+        .and_then(|cmd| cmd.parse().map(move |_| cmd))
+        .and_then(|cmd| cmd.exec())
+        .unwrap_or_else(|e| println!("{}", e));
 }
