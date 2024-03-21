@@ -14,7 +14,7 @@ impl Command for VersionCommand {
             "{}{}{}",
             title,
             "prints the current version of",
-            " sgr".to_string().bold()
+            " OwO".to_string().bold()
         );
         if verbose {
             println!(
@@ -25,7 +25,7 @@ impl Command for VersionCommand {
                     .bold()
                     .underline()
                     .fill_left(2),
-                "sgr version".to_string()
+                "owo version".to_string()
             );
         }
     }
