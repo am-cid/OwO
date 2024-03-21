@@ -8,7 +8,7 @@ pub struct HelpCommand {
     pub flags: Option<Vec<String>>,
 }
 impl Command for HelpCommand {
-    fn help_msg(verbose: bool) -> String {
+    fn help_msg(verbose: bool) {
         // H = cursor to top left, 2J = clear screen
         print!("\x1B[H\x1B[2J");
         let title = match verbose {
@@ -32,7 +32,6 @@ impl Command for HelpCommand {
             println!("{}", "owo help compile".to_string().fill_left(17));
             println!("{}", "owo help help".to_string().fill_left(17));
         }
-        "".to_string()
     }
     fn parse(&self) -> Result<(), String> {
         match self.arg.as_str() {

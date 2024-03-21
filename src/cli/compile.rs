@@ -5,7 +5,7 @@ pub struct CompileCommand {
     pub flags: Option<Vec<String>>,
 }
 impl Command for CompileCommand {
-    fn help_msg(verbose: bool) -> String {
+    fn help_msg(verbose: bool) {
         todo!()
     }
     fn parse(&self) -> Result<(), String> {

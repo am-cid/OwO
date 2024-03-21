@@ -5,7 +5,7 @@ pub struct ParseCommand {
     pub flags: Option<Vec<String>>,
 }
 impl Command for ParseCommand {
-    fn help_msg(verbose: bool) -> String {
+    fn help_msg(verbose: bool) {
         todo!()
     }
     fn parse(&self) -> Result<(), String> {
