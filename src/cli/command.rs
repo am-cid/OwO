@@ -15,7 +15,7 @@ pub fn to_command(
         "version" => todo!(),
         "lexer" => todo!(),
         "parser" => todo!(),
-        "semantic" => todo!(),
+        "analyze" => todo!(),
         "compile" => todo!(),
         "run" => todo!(),
         _ => Err(format!("Unknown command {}", name)),
