@@ -28,7 +28,7 @@ pub fn tokenize(args: Vec<String>) -> Result<impl Command, String> {
     to_command(command, arg, flags)
 }
 pub trait Command {
-    fn help_msg(verbose: bool) -> String;
+    fn help_msg(verbose: bool);
     fn parse(&self) -> Result<(), String>;
     fn exec(&self) -> Result<(), String>;
 }
