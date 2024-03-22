@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use crate::{cli::commands::Command, utils::path::PathExt};
+use crate::{
+    cli::commands::Command,
+    utils::{path::PathExt, string::StringExt},
+};
 
 pub struct Analyze {
     pub arg: String,
@@ -8,7 +11,37 @@ pub struct Analyze {
 }
 impl Command for Analyze {
     fn help_msg(verbose: bool) {
-        todo!()
+        let mut title = "analyze".to_string().pad_right(16).fill_left(2).bold();
+        if verbose {
+            title = title.underline();
+        }
+        println!(
+            "{}{}",
+            title, "Analyzes a selected source file for semantic errors."
+        );
+        println!(
+            "{}{}{}\n",
+            "".to_string().pad_right(16).fill_left(2),
+            "Outputs success/fail messages for each ",
+            "test case.".to_string().italic()
+        );
+        if verbose {
+            println!(
+                "{}{}",
+                "".to_string().pad_right(16).fill_left(2),
+                "The test cases are the ff:"
+            );
+            println!(
+                "{}\n{}",
+                "- Member Check".to_string().fill_left(22),
+                "- Type Check".to_string().fill_left(22),
+            );
+            println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
+            println!(
+                "{}",
+                "owo analyze path/to/source.uwu".to_string().fill_left(17)
+            );
+        }
     }
     fn parse(&self) -> Result<(), String> {
         Path::new(&self.arg)

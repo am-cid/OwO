@@ -16,14 +16,18 @@ impl Command for Lex {
         if verbose {
             title = title.underline();
         }
-        println!("{}{}\n", title, "Tokenizes a selected source file");
+        println!("{}{}", title, "Tokenizes a selected source file.");
+        println!(
+            "{}{}\n",
+            "".to_string().pad_right(16).fill_left(2),
+            "Outputs a list of token objects.",
+        );
         if verbose {
             println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
             println!("{}", "owo lex path/to/source.uwu".to_string().fill_left(17));
         }
     }
     fn parse(&self) -> Result<(), String> {
-        // check if abs path exists
         Path::new(&self.arg)
             .canonicalize()
             .map_err(|_| format!("Failed to canonicalize path: '{}'", self.arg))?
