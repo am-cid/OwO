@@ -230,7 +230,6 @@ impl Lexer {
             if atoms("alpha_num").contains(&self.curr_char)
                 || !expect_str.chars().all(|c| atoms("alpha_num").contains(&c))
             {
-                // exit the program
                 self.reverse(expect_str.len());
                 return Err(());
             }
