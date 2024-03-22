@@ -6,5 +6,4 @@ mod help;
 mod lex;
 mod parse;
 mod run;
-mod styling;
 mod version;
