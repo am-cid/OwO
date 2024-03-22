@@ -28,9 +28,8 @@ impl CommandType for LexCommand {
             .canonicalize()
             .map_err(|_| format!("Failed to canonicalize path: '{}'", self.arg))?
             .must_be_file()?
-            .display()
-            .to_string()
-            .ends_with(".uwu")
+            .extension()
+            .map_or(false, |ext| ext == "uwu")
             .then(|| ())
             .ok_or(format!("\"{}\" is not a .uwu file", self.arg))
     }
