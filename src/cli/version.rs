@@ -1,4 +1,4 @@
-use crate::cli::{commands::Command, styling::StringExt};
+use crate::{cli::commands::Command, utils::string::StringExt};
 
 pub struct Version {
     pub arg: String,

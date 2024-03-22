@@ -1,10 +1,10 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
-use crate::cli::{commands::Command, styling::StringExt};
-use crate::lexer::lexer::Lexer;
+use crate::{
+    cli::commands::Command,
+    lexer::lexer::Lexer,
+    utils::{path::PathExt, string::StringExt},
+};
 
 pub struct Lex {
     pub arg: String,
@@ -54,22 +54,5 @@ impl Command for Lex {
             .for_each(|token| println!("{:?}", token));
         l.errors.into_iter().for_each(|err| println!("{:?}", err));
         Ok(())
-    }
-}
-
-trait PathExt {
-    fn must_be_file(&self) -> Result<PathBuf, String>;
-}
-impl PathExt for Path {
-    fn must_be_file(&self) -> Result<PathBuf, String> {
-        match self.is_file() {
-            true => Ok(self.to_path_buf()),
-            false => {
-                let abs_path = self.display().to_string();
-                let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
-
-                Err(format!("\"{}\" is not a file", trimmed_path))
-            }
-        }
     }
 }
