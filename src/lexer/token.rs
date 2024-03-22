@@ -88,6 +88,8 @@ pub enum TokenType {
     MultiLineComment,
     // whitespace
     Whitespace,
+    Tab,
+    Newline,
 }
 
 impl fmt::Display for TokenType {
@@ -217,11 +219,13 @@ impl TokenType {
             Self::Cap => "cap",
             Self::Nuww => "nuww",
             Self::Whitespace => " ",
+            Self::Tab => "\t",
+            Self::Newline => "\r\n",
         }
     }
     pub fn delims(&self) -> HashSet<char> {
         let mut delim_set = match self {
-            Self::EOF | Self::Whitespace => atoms("all"),
+            Self::EOF | Self::Whitespace | Self::Tab | Self::Newline => atoms("all"),
             Self::Identifier => {
                 let mut res =
                     HashSet::from(['~', ',', '(', ')', '[', ']', '}', '!', '&', '|', '.']);
@@ -350,7 +354,7 @@ pub fn atoms(key: &str) -> HashSet<char> {
         "alpha_num" => ('a'..='z').chain('A'..='Z').chain('0'..='9').collect(),
         "arith_op" => HashSet::from(['+', '-', '*', '/', '%']),
         "gen_op" => HashSet::from(['+', '-', '*', '/', '%', '>', '<', '=']),
-        "whitespace" => HashSet::from([' ', '\t', '\n']),
+        "whitespace" => HashSet::from([' ', '\t', '\r']),
         // all ascii characters (non-extended)
         "all" => ('\x00'..='\x7F').collect(),
         _ => HashSet::new(),
@@ -693,8 +697,20 @@ pub fn to_token(
             pos,
             end_pos,
         }),
-        " " | "\t" | "\n" => Ok(Token {
+        " " => Ok(Token {
             kind: TokenType::Whitespace,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "\r\n" => Ok(Token {
+            kind: TokenType::Newline,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "\t" => Ok(Token {
+            kind: TokenType::Tab,
             text: text.into(),
             pos,
             end_pos,

@@ -43,8 +43,12 @@ impl Lexer {
     pub fn tokenize(&mut self) -> () {
         while self.pos < self.source.len() {
             match self.curr_char {
-                ' ' | '\t' | '\n' => self
+                ' ' => self
                     .peek_reserved(TokenType::Whitespace)
+                    .unwrap_or_else(|_| ()),
+                '\t' => self.peek_reserved(TokenType::Tab).unwrap_or_else(|_| ()),
+                '\r' => self
+                    .peek_reserved(TokenType::Newline)
                     .unwrap_or_else(|_| ()),
                 'b' => self
                     .peek_reserved(TokenType::Bweak)
@@ -213,6 +217,7 @@ impl Lexer {
     }
     fn peek_reserved(&mut self, expected: TokenType) -> Result<(), ()> {
         let expect_str = expected.to_str();
+        let (line, start, end) = (self.d_pos.0, self.d_pos.1, self.d_pos.1);
         for i in 0..expect_str.len() {
             if self.curr_char != expect_str.chars().nth(i).unwrap_or('\n') {
                 self.reverse(i);
@@ -224,7 +229,8 @@ impl Lexer {
             if atoms("alpha_num").contains(&self.curr_char)
                 || !expect_str.chars().all(|c| atoms("alpha_num").contains(&c))
             {
-                self.reverse(expect_str.len() - 1);
+                // exit the program
+                self.reverse(expect_str.len());
                 return Err(());
             }
             self.errors.push(
@@ -239,16 +245,23 @@ impl Lexer {
             );
             return Err(());
         }
+        let (line, start, end) = match expect_str {
+            "\r\n" => (line, start, end),
+            _ => (
+                self.d_pos.0,
+                self.d_pos.1 - expect_str.len(),
+                self.d_pos.1 - 1,
+            ),
+        };
         self.tokens.push(
-            to_token(
-                expect_str,
-                (self.d_pos.0, self.d_pos.1 - expect_str.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap(),
+            to_token(expect_str, (line, start), (line, end))
+                .map_err(|e| e.to_string())
+                .unwrap(),
         );
-        self.advance(1);
+        match expect_str {
+            "\r\n" | " " | "\t" => {}
+            _ => self.advance(1),
+        }
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
@@ -260,6 +273,7 @@ impl Lexer {
         let mut times = 0;
         while !delims.contains(&self.curr_char) {
             if !atoms("alpha_num").contains(&self.curr_char) {
+                // TODO: delim error
                 self.reverse(times);
                 return;
             }
@@ -289,7 +303,7 @@ impl Lexer {
         self.advance(1); // consume the <
 
         tmp.push_str(">.<");
-        while self.curr_char != '\n' {
+        while self.curr_char != '\r' {
             tmp.push(self.curr_char);
             self.advance(1);
         }
@@ -446,7 +460,7 @@ impl Lexer {
         self.advance(1); // consume the " or |
         let closing: Vec<char> = vec!['"', '|'];
         while !closing.contains(&self.curr_char) {
-            if self.curr_char == '\n' {
+            if self.curr_char == '\r' {
                 let token_type = match tmp.chars().nth(0).unwrap_or('\n') {
                     '"' => TokenType::StringLiteral,
                     '|' => TokenType::StringPartMid,
