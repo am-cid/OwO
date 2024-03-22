@@ -12,7 +12,7 @@ pub struct Lex {
 }
 impl Command for Lex {
     fn help_msg(verbose: bool) {
-        let mut title = "lex".to_string().pad_right(15).fill_left(2).bold();
+        let mut title = "lex".to_string().pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
