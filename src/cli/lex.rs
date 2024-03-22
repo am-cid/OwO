@@ -16,7 +16,7 @@ impl Command for Lex {
         if verbose {
             title = title.underline();
         }
-        println!("{}{}", title, "Tokenizes a selected source file");
+        println!("{}{}\n", title, "Tokenizes a selected source file");
         if verbose {
             println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
             println!("{}", "owo lex path/to/source.uwu".to_string().fill_left(17));

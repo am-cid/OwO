@@ -9,21 +9,21 @@ pub struct Help {
 }
 impl Command for Help {
     fn help_msg(verbose: bool) {
-        let mut title = "help".to_string().pad_right(15).fill_left(2).bold();
+        let mut title = "help".to_string().pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
         println!("{}{}", title, "prints this help message or the verbose");
         println!(
             "{}{}\n",
-            "".to_string().pad_right(15).fill_left(2),
+            "".to_string().pad_right(16).fill_left(2),
             "help message for a specific command if specified"
         );
         if verbose {
-            println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
-            println!("{}", "owo help".to_string().fill_left(17));
-            println!("{}", "owo help compile".to_string().fill_left(17));
-            println!("{}", "owo help help".to_string().fill_left(17));
+            println!("{}", "Usage:".to_string().bold().underline().fill_left(2));
+            println!("{}", "owo help".to_string().fill_left(18));
+            println!("{}", "owo help compile".to_string().fill_left(18));
+            println!("{}", "owo help help".to_string().fill_left(18));
         }
     }
     fn parse(&self) -> Result<(), String> {
@@ -57,12 +57,13 @@ impl Command for Help {
                     "<optional_arg>".to_string().italic()
                 );
                 println!("{}: ", "Optional Commands".to_string().bold().underline());
+                Self::help_msg(false);
+                Version::help_msg(false);
                 Lex::help_msg(false);
                 Parse::help_msg(false);
                 Analyze::help_msg(false);
                 Compile::help_msg(false);
                 Run::help_msg(false);
-                Version::help_msg(false);
                 Self::help_msg(false);
             }
             _ => {
