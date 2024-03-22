@@ -47,7 +47,8 @@ impl Lexer {
                     .peek_reserved(TokenType::Whitespace)
                     .unwrap_or_else(|_| ()),
                 '\t' => self.peek_reserved(TokenType::Tab).unwrap_or_else(|_| ()),
-                '\r' => self
+                '\r' => self.peek_reserved(TokenType::Return).unwrap_or_else(|_| ()),
+                '\n' => self
                     .peek_reserved(TokenType::Newline)
                     .unwrap_or_else(|_| ()),
                 'b' => self
@@ -246,7 +247,7 @@ impl Lexer {
             return Err(());
         }
         let (line, start, end) = match expect_str {
-            "\r\n" => (line, start, end),
+            "\r" | "\n" => (line, start, end),
             _ => (
                 self.d_pos.0,
                 self.d_pos.1 - expect_str.len(),
@@ -258,10 +259,6 @@ impl Lexer {
                 .map_err(|e| e.to_string())
                 .unwrap(),
         );
-        match expect_str {
-            "\r\n" | " " | "\t" => {}
-            _ => self.advance(1),
-        }
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
@@ -303,7 +300,7 @@ impl Lexer {
         self.advance(1); // consume the <
 
         tmp.push_str(">.<");
-        while self.curr_char != '\r' {
+        while self.curr_char != '\r' && self.curr_char != '\n' {
             tmp.push(self.curr_char);
             self.advance(1);
         }
@@ -460,7 +457,7 @@ impl Lexer {
         self.advance(1); // consume the " or |
         let closing: Vec<char> = vec!['"', '|'];
         while !closing.contains(&self.curr_char) {
-            if self.curr_char == '\r' {
+            if self.curr_char == '\r' || self.curr_char == '\n' {
                 let token_type = match tmp.chars().nth(0).unwrap_or('\n') {
                     '"' => TokenType::StringLiteral,
                     '|' => TokenType::StringPartMid,
