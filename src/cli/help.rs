@@ -1,6 +1,9 @@
-use crate::cli::{
-    analyze::Analyze, commands::Command, compile::Compile, lex::Lex, parse::Parse, run::Run,
-    styling::StringExt, version::Version,
+use crate::{
+    cli::{
+        analyze::Analyze, commands::Command, compile::Compile, lex::Lex, parse::Parse, run::Run,
+        version::Version,
+    },
+    utils::string::StringExt,
 };
 
 pub struct Help {
