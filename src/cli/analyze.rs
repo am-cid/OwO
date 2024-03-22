@@ -26,9 +26,8 @@ impl Command for Analyze {
         );
         if verbose {
             println!(
-                "{}{}\n{}\n{}",
-                "".to_string().pad_right(16).fill_left(2),
-                "The test cases are the ff:",
+                "{}\n{}\n{}",
+                "The test cases are the ff:".to_string().fill_left(18),
                 "- Member Check".to_string().fill_left(22),
                 "- Type Check".to_string().fill_left(22),
             );
