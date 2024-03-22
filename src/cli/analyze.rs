@@ -1,10 +1,10 @@
 use crate::cli::commands::Command;
 
-pub struct AnalyzeCommand {
+pub struct Analyze {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for AnalyzeCommand {
+impl Command for Analyze {
     fn help_msg(verbose: bool) {
         todo!()
     }

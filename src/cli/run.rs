@@ -1,10 +1,10 @@
 use crate::cli::commands::Command;
 
-pub struct RunCommand {
+pub struct Run {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for RunCommand {
+impl Command for Run {
     fn help_msg(verbose: bool) {
         todo!()
     }

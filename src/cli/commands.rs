@@ -1,6 +1,6 @@
 use crate::cli::{
-    analyze::AnalyzeCommand, compile::CompileCommand, help::HelpCommand, lex::LexCommand,
-    parse::ParseCommand, run::RunCommand, version::VersionCommand,
+    analyze::Analyze, compile::Compile, help::Help, lex::Lex, parse::Parse, run::Run,
+    version::Version,
 };
 
 pub trait Command {
@@ -17,13 +17,13 @@ pub fn to_command(
     flags: Option<Vec<String>>,
 ) -> Result<Box<dyn Command>, String> {
     match name.as_str() {
-        "help" | "" => Ok(Box::new(HelpCommand { arg, flags })),
-        "version" => Ok(Box::new(VersionCommand { arg, flags })),
-        "lex" => Ok(Box::new(LexCommand { arg, flags })),
-        "parse" => Ok(Box::new(ParseCommand { arg, flags })),
-        "analyze" => Ok(Box::new(AnalyzeCommand { arg, flags })),
-        "compile" => Ok(Box::new(CompileCommand { arg, flags })),
-        "run" => Ok(Box::new(RunCommand { arg, flags })),
+        "help" | "" => Ok(Box::new(Help { arg, flags })),
+        "version" => Ok(Box::new(Version { arg, flags })),
+        "lex" => Ok(Box::new(Lex { arg, flags })),
+        "parse" => Ok(Box::new(Parse { arg, flags })),
+        "analyze" => Ok(Box::new(Analyze { arg, flags })),
+        "compile" => Ok(Box::new(Compile { arg, flags })),
+        "run" => Ok(Box::new(Run { arg, flags })),
         _ => Err(format!("Unknown command {}", name)),
     }
 }

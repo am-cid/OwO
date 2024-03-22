@@ -1,13 +1,13 @@
 use crate::cli::{
-    analyze::AnalyzeCommand, commands::Command, compile::CompileCommand, lex::LexCommand,
-    parse::ParseCommand, run::RunCommand, styling::StringExt, version::VersionCommand,
+    analyze::Analyze, commands::Command, compile::Compile, lex::Lex, parse::Parse, run::Run,
+    styling::StringExt, version::Version,
 };
 
-pub struct HelpCommand {
+pub struct Help {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for HelpCommand {
+impl Command for Help {
     fn help_msg(verbose: bool) {
         let mut title = "help".to_string().pad_right(15).fill_left(2).bold();
         if verbose {
@@ -54,23 +54,23 @@ impl Command for HelpCommand {
                     "<optional_arg>".to_string().italic()
                 );
                 println!("{}: ", "Optional Commands".to_string().bold().underline());
-                LexCommand::help_msg(false);
-                ParseCommand::help_msg(false);
-                AnalyzeCommand::help_msg(false);
-                CompileCommand::help_msg(false);
-                RunCommand::help_msg(false);
-                VersionCommand::help_msg(false);
+                Lex::help_msg(false);
+                Parse::help_msg(false);
+                Analyze::help_msg(false);
+                Compile::help_msg(false);
+                Run::help_msg(false);
+                Version::help_msg(false);
                 Self::help_msg(false);
             }
             _ => {
                 match self.arg.as_str() {
                     "help" => Self::help_msg(true),
-                    "lex" => LexCommand::help_msg(true),
-                    "parse" => ParseCommand::help_msg(true),
-                    "analyze" => AnalyzeCommand::help_msg(true),
-                    "compile" => CompileCommand::help_msg(true),
-                    "run" => RunCommand::help_msg(true),
-                    "version" => VersionCommand::help_msg(true),
+                    "lex" => Lex::help_msg(true),
+                    "parse" => Parse::help_msg(true),
+                    "analyze" => Analyze::help_msg(true),
+                    "compile" => Compile::help_msg(true),
+                    "run" => Run::help_msg(true),
+                    "version" => Version::help_msg(true),
                     _ => unreachable!(),
                 };
             }
