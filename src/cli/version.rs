@@ -11,7 +11,7 @@ impl Command for Version {
             title = title.underline();
         }
         println!(
-            "{}{}{}",
+            "{}{}{}\n",
             title,
             "prints the current version of",
             " OwO".to_string().bold()
