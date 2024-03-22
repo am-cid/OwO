@@ -41,13 +41,16 @@ impl Command for Help {
         match self.arg.as_str() {
             "" => {
                 println!(
-                    "{} Compiler for UwU++\n",
+                    "{}Compiler for UwU++\n",
                     "OwO".to_string().pad_right(16).bold().underline()
                 );
-                print!("{}", "Version".to_string().pad_right(16).bold().underline());
+                print!(
+                    "{}",
+                    "Version:".to_string().pad_right(16).bold().underline()
+                );
                 println!("{}", env!("CARGO_PKG_VERSION"));
                 println!(
-                    "{} {} {} {}\n",
+                    "{}{} {} {}\n",
                     "Usage:".to_string().pad_right(16).bold().underline(),
                     "owo".to_string().bold(),
                     "<optional_command>".to_string().italic(),

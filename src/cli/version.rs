@@ -6,7 +6,7 @@ pub struct Version {
 }
 impl Command for Version {
     fn help_msg(verbose: bool) {
-        let mut title = "version".to_string().pad_right(15).fill_left(2).bold();
+        let mut title = "version".to_string().pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
