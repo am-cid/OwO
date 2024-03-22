@@ -3,14 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::cli::{commands::CommandType, styling::StringExt};
+use crate::cli::{commands::Command, styling::StringExt};
 use crate::lexer::lexer::Lexer;
 
 pub struct LexCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl CommandType for LexCommand {
+impl Command for LexCommand {
     fn help_msg(verbose: bool) {
         let mut title = "lex".to_string().pad_right(15).fill_left(2).bold();
         if verbose {
