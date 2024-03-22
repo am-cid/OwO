@@ -41,7 +41,7 @@ impl Command for Help {
         match self.arg.as_str() {
             "" => {
                 println!(
-                    "{}Compiler for UwU++\n",
+                    "{}Compiler for UwU++",
                     "OwO".to_string().pad_right(18).bold().underline()
                 );
                 print!(
