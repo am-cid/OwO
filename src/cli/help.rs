@@ -69,7 +69,6 @@ impl Command for Help {
                 Analyze::help_msg(false);
                 Compile::help_msg(false);
                 Run::help_msg(false);
-                Self::help_msg(false);
             }
             _ => {
                 match self.arg.as_str() {
