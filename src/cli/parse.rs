@@ -15,15 +15,20 @@ impl Command for Parse {
         if verbose {
             title = title.underline();
         }
-        println!("{}{}", title, "Parses a selected source file.");
         println!(
-            "{}{}\n",
-            "".to_string().pad_right(16).fill_left(2),
+            "{}{}\n{}\n",
+            title,
+            "Parses a selected source file.",
             "Outputs an abstract syntax tree (AST)."
+                .to_string()
+                .fill_left(18),
         );
         if verbose {
-            println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
-            println!("{}", "owo lex path/to/source.uwu".to_string().fill_left(17));
+            println!(
+                "\n{}{}",
+                "Usage:".to_string().bold().underline().fill_left(2),
+                "owo parse path/to/source.uwu".to_string().fill_left(10),
+            );
         }
     }
     fn parse(&self) -> Result<(), String> {

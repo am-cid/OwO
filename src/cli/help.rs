@@ -16,15 +16,17 @@ impl Command for Help {
         if verbose {
             title = title.underline();
         }
-        println!("{}{}", title, "prints this help message or the verbose");
         println!(
-            "{}{}\n",
-            "".to_string().pad_right(16).fill_left(2),
+            "{}{}\n{}\n",
+            title,
+            "prints this help message or the verbose",
             "help message for a specific command if specified"
+                .to_string()
+                .fill_left(18),
         );
         if verbose {
-            println!("{}", "Usage:".to_string().bold().underline().fill_left(2));
-            println!("{}", "owo help".to_string().fill_left(18));
+            print!("{}", "Usage:".to_string().bold().underline().fill_left(2));
+            println!("{}", "owo help".to_string().fill_left(10));
             println!("{}", "owo help compile".to_string().fill_left(18));
             println!("{}", "owo help help".to_string().fill_left(18));
         }

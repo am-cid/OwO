@@ -16,30 +16,26 @@ impl Command for Analyze {
             title = title.underline();
         }
         println!(
-            "{}{}",
-            title, "Analyzes a selected source file for semantic errors."
-        );
-        println!(
-            "{}{}{}\n",
-            "".to_string().pad_right(16).fill_left(2),
-            "Outputs success/fail messages for each ",
+            "{}{}\n{}{}\n",
+            title,
+            "Analyzes a selected source file for semantic errors.",
+            "Outputs success/fail messages for each "
+                .to_string()
+                .fill_left(18),
             "test case.".to_string().italic()
         );
         if verbose {
             println!(
-                "{}{}",
+                "{}{}\n{}\n{}",
                 "".to_string().pad_right(16).fill_left(2),
-                "The test cases are the ff:"
-            );
-            println!(
-                "{}\n{}",
+                "The test cases are the ff:",
                 "- Member Check".to_string().fill_left(22),
                 "- Type Check".to_string().fill_left(22),
             );
-            println!("\n{}", "Usage:".to_string().bold().underline().fill_left(2));
-            println!(
-                "{}",
-                "owo analyze path/to/source.uwu".to_string().fill_left(17)
+            print!(
+                "\n{}{}",
+                "Usage:".to_string().bold().underline().fill_left(2),
+                "owo analyze path/to/source.uwu".to_string().fill_left(10)
             );
         }
     }
