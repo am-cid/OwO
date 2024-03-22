@@ -3,14 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::cli::{commands::Command, styling::StringExt};
+use crate::cli::{commands::CommandType, styling::StringExt};
 use crate::lexer::lexer::Lexer;
 
 pub struct LexCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for LexCommand {
+impl CommandType for LexCommand {
     fn help_msg(verbose: bool) {
         let mut title = "lex".to_string().pad_right(15).fill_left(2).bold();
         if verbose {
@@ -28,6 +28,8 @@ impl Command for LexCommand {
             .canonicalize()
             .map_err(|_| format!("Failed to canonicalize path: '{}'", self.arg))?
             .must_be_file()?
+            .display()
+            .to_string()
             .ends_with(".uwu")
             .then(|| ())
             .ok_or(format!("\"{}\" is not a .uwu file", self.arg))
@@ -46,7 +48,11 @@ impl Command for LexCommand {
                 .unwrap_or("".to_string())
                 .into_boxed_str(),
         );
-        Lexer::new(source).tokenize();
+        let mut l = Lexer::new(source);
+        l.tokenize();
+        for token in l.tokens {
+            println!("{:?}", token);
+        }
         Ok(())
     }
 }
