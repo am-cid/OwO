@@ -3,11 +3,13 @@ use crate::cli::{
     parse::ParseCommand, run::RunCommand, styling::StringExt, version::VersionCommand,
 };
 
+use super::commands::CommandType;
+
 pub struct HelpCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for HelpCommand {
+impl CommandType for HelpCommand {
     fn help_msg(verbose: bool) {
         let mut title = "help".to_string().pad_right(15).fill_left(2).bold();
         if verbose {

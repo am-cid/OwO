@@ -1,10 +1,10 @@
-use crate::cli::commands::Command;
+use crate::cli::commands::CommandType;
 
 pub struct CompileCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for CompileCommand {
+impl CommandType for CompileCommand {
     fn help_msg(verbose: bool) {
         todo!()
     }
