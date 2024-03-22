@@ -42,16 +42,16 @@ impl Command for Help {
             "" => {
                 println!(
                     "{}Compiler for UwU++\n",
-                    "OwO".to_string().pad_right(16).bold().underline()
+                    "OwO".to_string().pad_right(18).bold().underline()
                 );
                 print!(
                     "{}",
-                    "Version:".to_string().pad_right(16).bold().underline()
+                    "Version:".to_string().pad_right(18).bold().underline()
                 );
                 println!("{}", env!("CARGO_PKG_VERSION"));
                 println!(
                     "{}{} {} {}\n",
-                    "Usage:".to_string().pad_right(16).bold().underline(),
+                    "Usage:".to_string().pad_right(18).bold().underline(),
                     "owo".to_string().bold(),
                     "<optional_command>".to_string().italic(),
                     "<optional_arg>".to_string().italic()
