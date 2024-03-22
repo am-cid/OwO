@@ -90,6 +90,7 @@ pub enum TokenType {
     Whitespace,
     Tab,
     Newline,
+    Return,
 }
 
 impl fmt::Display for TokenType {
@@ -147,6 +148,11 @@ pub fn reserved_to_token_type(text: &str) -> TokenType {
         "fax" => TokenType::Fax,
         "cap" => TokenType::Cap,
         "nuww" => TokenType::Nuww,
+        "~" => TokenType::Terminator,
+        " " => TokenType::Whitespace,
+        "\t" => TokenType::Tab,
+        "\r" => TokenType::Return,
+        "\n" => TokenType::Newline,
         _ => TokenType::EOF,
     }
 }
@@ -220,12 +226,13 @@ impl TokenType {
             Self::Nuww => "nuww",
             Self::Whitespace => " ",
             Self::Tab => "\t",
-            Self::Newline => "\r\n",
+            Self::Newline => "\n",
+            Self::Return => "\r",
         }
     }
     pub fn delims(&self) -> HashSet<char> {
         let mut delim_set = match self {
-            Self::EOF | Self::Whitespace | Self::Tab | Self::Newline => atoms("all"),
+            Self::EOF | Self::Whitespace | Self::Tab | Self::Newline | Self::Return => atoms("all"),
             Self::Identifier => {
                 let mut res =
                     HashSet::from(['~', ',', '(', ')', '[', ']', '}', '!', '&', '|', '.']);
@@ -354,7 +361,7 @@ pub fn atoms(key: &str) -> HashSet<char> {
         "alpha_num" => ('a'..='z').chain('A'..='Z').chain('0'..='9').collect(),
         "arith_op" => HashSet::from(['+', '-', '*', '/', '%']),
         "gen_op" => HashSet::from(['+', '-', '*', '/', '%', '>', '<', '=']),
-        "whitespace" => HashSet::from([' ', '\t', '\r']),
+        "whitespace" => HashSet::from([' ', '\n', '\t', '\r']),
         // all ascii characters (non-extended)
         "all" => ('\x00'..='\x7F').collect(),
         _ => HashSet::new(),
@@ -685,14 +692,8 @@ pub fn to_token(
             pos,
             end_pos,
         }),
-        ">.<" => Ok(Token {
-            kind: TokenType::SingleLineComment,
-            text: text.into(),
-            pos,
-            end_pos,
-        }),
-        r#">//<"# => Ok(Token {
-            kind: TokenType::MultiLineComment,
+        "~" => Ok(Token {
+            kind: TokenType::Terminator,
             text: text.into(),
             pos,
             end_pos,
@@ -703,7 +704,13 @@ pub fn to_token(
             pos,
             end_pos,
         }),
-        "\r\n" => Ok(Token {
+        "\r" => Ok(Token {
+            kind: TokenType::Return,
+            text: text.into(),
+            pos,
+            end_pos,
+        }),
+        "\n" => Ok(Token {
             kind: TokenType::Newline,
             text: text.into(),
             pos,
