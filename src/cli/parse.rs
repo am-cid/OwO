@@ -1,10 +1,10 @@
-use crate::cli::commands::CommandType;
+use crate::cli::commands::Command;
 
 pub struct ParseCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl CommandType for ParseCommand {
+impl Command for ParseCommand {
     fn help_msg(verbose: bool) {
         todo!()
     }

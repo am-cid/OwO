@@ -1,10 +1,10 @@
-use crate::cli::{commands::CommandType, styling::StringExt};
+use crate::cli::{commands::Command, styling::StringExt};
 
 pub struct VersionCommand {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl CommandType for VersionCommand {
+impl Command for VersionCommand {
     fn help_msg(verbose: bool) {
         let mut title = "version".to_string().pad_right(15).fill_left(2).bold();
         if verbose {
