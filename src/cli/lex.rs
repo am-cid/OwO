@@ -6,11 +6,11 @@ use std::{
 use crate::cli::{commands::Command, styling::StringExt};
 use crate::lexer::lexer::Lexer;
 
-pub struct LexCommand {
+pub struct Lex {
     pub arg: String,
     pub flags: Option<Vec<String>>,
 }
-impl Command for LexCommand {
+impl Command for Lex {
     fn help_msg(verbose: bool) {
         let mut title = "lex".to_string().pad_right(15).fill_left(2).bold();
         if verbose {
