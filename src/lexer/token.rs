@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TokenType {
     // ids
     Identifier,
@@ -368,7 +368,7 @@ pub fn atoms(key: &str) -> HashSet<char> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token {
     kind: TokenType,
     text: &'static str,
