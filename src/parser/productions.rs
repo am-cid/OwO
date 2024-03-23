@@ -192,10 +192,32 @@ impl_statement!(Assignment {
 pub struct If {
     pub condition: Token,
     pub body: Body,
+    pub else_ifs: Vec<ElseIf>,
+    pub else_body: Option<Body>,
 }
 impl_statement!(If {
     fn token(&self) -> String {
-        format!("if {}:\n{}", self.condition, self.body.token())
+        format!(
+            "if {}:\n{}\n{}\n{}",
+            self.condition,
+            self.body.token(),
+            self.else_ifs
+                .iter()
+                .map(|x| x.token())
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.else
+        )
+    }
+});
+
+pub struct ElseIf {
+    pub condition: Token,
+    pub body: Body,
+}
+impl_statement!(ElseIf {
+    fn token(&self) -> String {
+        format!("else if {}:\n{}", self.condition, self.body.token())
     }
 });
 
