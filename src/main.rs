@@ -1,6 +1,7 @@
 mod cli;
 mod errors;
 mod lexer;
+mod parser;
 mod utils;
 
 fn main() {
