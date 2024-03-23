@@ -153,7 +153,7 @@ pub fn reserved_to_token_type(text: &str) -> TokenType {
         "\t" => TokenType::Tab,
         "\r" => TokenType::Return,
         "\n" => TokenType::Newline,
-        _ => TokenType::EOF,
+        _ => TokenType::Newline,
     }
 }
 
