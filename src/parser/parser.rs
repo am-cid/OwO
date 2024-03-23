@@ -77,6 +77,25 @@ impl Parser {
             expected_in_block_tokens: vec![],
         })
     }
+    pub fn parse_program(&mut self) {
+        self.register_init();
+        while !self.curr_tok_is(TokenType::EOF) {
+            match self.curr_tok.kind {
+                TokenType::Fwunc => self.parse_func(),
+                TokenType::Gwobaw => {
+                    self.advance(1); // consume the gwobaw token
+                    self.parse_declaration();
+                }
+                TokenType::Cwass => self.parse_class(),
+                _ => {
+                    // TODO: add wrong global starting token
+                    println!("Unexpected token: {}", self.curr_tok);
+                }
+            }
+            self.advance(1);
+        }
+    }
+
     fn advance(&mut self, times: usize) -> () {
         if self.curr_tok_is(TokenType::EOF) {
             return;
