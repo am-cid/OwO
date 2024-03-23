@@ -370,10 +370,10 @@ pub fn atoms(key: &str) -> HashSet<char> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Token {
-    kind: TokenType,
-    text: &'static str,
-    pos: (usize, usize),
-    end_pos: (usize, usize),
+    pub kind: TokenType,
+    pub text: &'static str,
+    pub pos: (usize, usize),
+    pub end_pos: (usize, usize),
 }
 
 impl fmt::Display for Token {
