@@ -76,4 +76,33 @@ impl Parser {
             expected_in_block_tokens: vec![],
         })
     }
+    fn advance(&mut self, times: usize) -> () {
+        if self.curr_tok_is(TokenType::EOF) {
+            return;
+        }
+        for _ in 0..times {
+            self.pos += 1;
+            self.curr_tok = self.peek_tok;
+            if self.peek_tok_is(TokenType::EOF) {
+                return;
+            }
+            self.peek_tok = self.tokens[self.pos];
+        }
+    }
+
+    // helper fns
+    fn curr_tok_is(&self, token_type: TokenType) -> bool {
+        self.curr_tok.kind == token_type
+    }
+    fn peek_tok_is(&self, token_type: TokenType) -> bool {
+        self.peek_tok.kind == token_type
+    }
+    fn expect_peek(&mut self, token_type: TokenType) -> bool {
+        if self.peek_tok_is(token_type) {
+            self.advance(1);
+            true
+        } else {
+            false
+        }
+    }
 }
