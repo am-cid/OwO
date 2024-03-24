@@ -15,12 +15,15 @@ pub struct Parser {
     pub curr_tok: Token,
     pub peek_tok: Token,
 
-    pub prefix_parse_fns: HashMap<TokenType, fn(&mut Self)>,
-    pub prefix_special_parse_fns: HashMap<TokenType, fn(&mut Self)>,
-    pub infix_parse_fns: HashMap<TokenType, fn(&mut Self, Box<dyn Expression>)>,
-    pub infix_special_parse_fns: HashMap<TokenType, fn(&mut Self, Box<dyn Expression>)>,
-    pub postfix_parse_fns: HashMap<TokenType, fn(&mut Self, Box<dyn Expression>)>,
-    pub in_block_parse_fns: HashMap<TokenType, fn(&mut Self)>,
+    pub prefix_parse_fns: HashMap<TokenType, fn(&mut Self) -> Box<dyn Expression>>,
+    pub prefix_special_parse_fns: HashMap<TokenType, fn(&mut Self) -> Box<dyn Expression>>,
+    pub infix_parse_fns:
+        HashMap<TokenType, fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>>,
+    pub infix_special_parse_fns:
+        HashMap<TokenType, fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>>,
+    pub postfix_parse_fns:
+        HashMap<TokenType, fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>>,
+    pub in_block_parse_fns: HashMap<TokenType, fn(&mut Self) -> Box<dyn Statement>>,
 
     pub expected_prefix_tokens: Vec<TokenType>,
     pub expected_prefix_special_tokens: Vec<TokenType>,
@@ -188,39 +191,51 @@ impl Parser {
     }
 
     // register_init helper fns
-    fn register_prefix(&mut self, token_type: TokenType, parser: fn(&mut Self)) -> () {
+    fn register_prefix(
+        &mut self,
+        token_type: TokenType,
+        parser: fn(&mut Self) -> Box<dyn Expression>,
+    ) {
         self.prefix_parse_fns.insert(token_type, parser);
         self.expected_prefix_tokens.push(token_type);
     }
-    fn register_prefix_special(&mut self, token_type: TokenType, parser: fn(&mut Self)) -> () {
+    fn register_prefix_special(
+        &mut self,
+        token_type: TokenType,
+        parser: fn(&mut Self) -> Box<dyn Expression>,
+    ) {
         self.prefix_special_parse_fns.insert(token_type, parser);
         self.expected_prefix_special_tokens.push(token_type);
     }
     fn register_infix(
         &mut self,
         token_type: TokenType,
-        parser: fn(&mut Self, Box<dyn Expression>),
-    ) -> () {
+        parser: fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>,
+    ) {
         self.infix_parse_fns.insert(token_type, parser);
         self.expected_infix_tokens.push(token_type);
     }
     fn register_infix_special(
         &mut self,
         token_type: TokenType,
-        parser: fn(&mut Self, Box<dyn Expression>),
-    ) -> () {
+        parser: fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>,
+    ) {
         self.infix_special_parse_fns.insert(token_type, parser);
         self.expected_infix_special_tokens.push(token_type);
     }
     fn register_postfix(
         &mut self,
         token_type: TokenType,
-        parser: fn(&mut Self, Box<dyn Expression>),
-    ) -> () {
+        parser: fn(&mut Self, Box<dyn Expression>) -> Box<dyn Expression>,
+    ) {
         self.postfix_parse_fns.insert(token_type, parser);
         self.expected_postfix_tokens.push(token_type);
     }
-    fn register_in_block(&mut self, token_type: TokenType, parser: fn(&mut Self)) -> () {
+    fn register_in_block(
+        &mut self,
+        token_type: TokenType,
+        parser: fn(&mut Self) -> Box<dyn Statement>,
+    ) {
         self.in_block_parse_fns.insert(token_type, parser);
         self.expected_in_block_tokens.push(token_type);
     }
