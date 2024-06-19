@@ -1,6 +1,8 @@
 mod cli;
 mod errors;
 mod lexer;
+#[cfg(test)]
+mod tests;
 mod utils;
 
 fn main() {
