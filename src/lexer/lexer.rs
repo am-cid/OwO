@@ -1,6 +1,9 @@
-use crate::errors::errors::{CompilerError, DelimError, UnknownTokenError};
-use crate::lexer::token::{atoms, reserved_to_token_type, to_token, Token, TokenType};
+use crate::errors::errors::{
+    CompilerError, DelimError, SingleBracketError, UnclosedCharError, UnclosedStringError,
+    UnknownTokenError,
+};
 use crate::lexer::token::{Atoms, Token, TokenType};
+use std::collections::HashSet;
 use std::fmt;
 
 pub struct Lexer {
