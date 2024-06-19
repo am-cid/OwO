@@ -376,15 +376,26 @@ impl Lexer {
         ));
     }
     /// must be called after peek_int since it requires the digits before the decimal point
+    fn peek_float(&mut self, before: String) -> () {
+        let mut tmp = before;
+        self.advance(1); // consume the .
+        tmp.push('.');
+        let delims: HashSet<char> = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace])
+            .into_iter()
+            .filter(|&x| x != '.')
+            .collect();
+        while self.curr_char.is_ascii_digit() || self.curr_char == '_' {
             tmp.push(self.curr_char);
             self.advance(1);
         }
-        // wrong delimiter
-        if !TokenType::FloatLiteral.delims().contains(&self.curr_char) {
+        if ['_', '.'].contains(&tmp.chars().last().unwrap_or_default()) {
+            self.reverse(1);
+        }
+        if !delims.contains(&self.curr_char) {
             self.errors.push(
                 DelimError::new(
                     TokenType::FloatLiteral,
-                    TokenType::FloatLiteral.delims(),
+                    delims,
                     self.curr_char,
                     self.source.lines().nth(self.d_pos.0).unwrap(),
                     self.d_pos,
@@ -394,15 +405,11 @@ impl Lexer {
             return;
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(
-                token,
-                (self.d_pos.0, self.d_pos.1 - token.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap(),
-        );
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
     }
     fn peek_string(&mut self) -> () {
         let mut tmp: String = self.curr_char.to_string();
