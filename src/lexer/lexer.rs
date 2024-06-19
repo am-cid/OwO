@@ -411,50 +411,78 @@ impl Lexer {
             (self.d_pos.0, self.d_pos.1 - 1),
         ));
     }
-    fn peek_string(&mut self) -> () {
-        let mut tmp: String = self.curr_char.to_string();
-        self.advance(1); // consume the " or |
-        let closing: Vec<char> = vec!['"', '|'];
-        while !closing.contains(&self.curr_char) {
+    fn peek_string(&mut self) -> Result<(), ()> {
+        let starting = self.curr_char; // either " or }
+        self.advance(1);
+        let mut advance_count = 1;
+        let mut tmp: String = starting.to_string();
+        while !['"', '{'].contains(&self.curr_char) {
+            // unclosed string or single bracket
             if self.curr_char == '\r' || self.curr_char == '\n' {
-                let token_type = match tmp.chars().nth(0).unwrap_or('\n') {
-                    '"' => TokenType::StringLiteral,
-                    '|' => TokenType::StringPartMid,
+                match starting {
+                    '"' => {
+                        self.errors.push(
+                            UnclosedStringError::new(
+                                self.curr_char,
+                                self.source.lines().nth(self.d_pos.0).unwrap(),
+                                (self.d_pos.0, self.d_pos.1 - tmp.len()),
+                                tmp.len(),
+                            )
+                            .message(),
+                        );
+                        return Err(());
+                    }
+                    '}' => {
+                        self.reverse(advance_count);
+                        return Err(());
+                    }
                     _ => unreachable!(),
-                };
-                let expected_delims = token_type.delims();
-                self.errors.push(
-                    DelimError::new(
-                        token_type,
-                        expected_delims,
-                        self.curr_char,
-                        self.source.lines().nth(self.d_pos.0).unwrap(),
-                        self.d_pos,
-                    )
-                    .message(),
-                );
-                return;
+                }
+            }
+            // ensure double {{
+            while self.curr_char == '{' && self.peek_char == '{' {
+                tmp.extend("{{".chars());
+                self.advance(2);
+                advance_count += 2;
+            }
+            // ensure double }}
+            while self.curr_char == '}' {
+                if self.peek_char != '}' {
+                    self.errors.push(
+                        SingleBracketError::new(
+                            self.source.lines().nth(self.d_pos.0).unwrap(),
+                            self.d_pos,
+                        )
+                        .message(),
+                    );
+                    self.advance(1);
+                    return Err(());
+                }
+                tmp.extend("}}".chars());
+                self.advance(2);
+                advance_count += 2;
             }
             tmp.push(self.curr_char);
             self.advance(1);
+            advance_count += 1;
         }
         tmp.push(self.curr_char);
         let delims = match self.curr_char {
-            '"' => TokenType::StringLiteral.delims(),
-            '|' => TokenType::StringPartMid.delims(),
+            '"' => Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]),
+            '{' => Atoms::combine(&[Atoms::AlphaNum, Atoms::Symbols, Atoms::Whitespace]),
             _ => unreachable!(),
         };
         let token_type = match (
-            tmp.chars().nth(0).unwrap_or('\n'),
-            tmp.chars().last().unwrap_or('\n'),
+            tmp.chars().nth(0).unwrap_or('"'),
+            tmp.chars().last().unwrap_or('"'),
         ) {
             ('"', '"') => TokenType::StringLiteral,
-            ('"', '|') => TokenType::StringPartStart,
-            ('|', '|') => TokenType::StringPartMid,
-            ('|', '"') => TokenType::StringPartEnd,
+            ('"', '{') => TokenType::StringPartStart,
+            ('}', '{') => TokenType::StringPartMid,
+            ('}', '"') => TokenType::StringPartEnd,
             _ => unreachable!(),
         };
-        self.advance(1); // consume the closing " or |
+        self.advance(1); // consume the closing " or {
         if !delims.contains(&self.curr_char) {
             self.errors.push(
                 DelimError::new(
@@ -468,15 +496,13 @@ impl Lexer {
             )
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(
-                token,
-                (self.d_pos.0, self.d_pos.1 - token.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap(),
-        )
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
+        Ok(())
+    }
     // HELPER METHODS
     fn expect_peek_char_is(&mut self, expected: char, reverse_count: usize) -> Result<(), ()> {
         match expected == self.peek_char {
