@@ -208,10 +208,11 @@ impl Lexer {
             }
         }
     }
+    // CURSOR MOVEMENT
     fn advance(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos > self.source.len() - 1 {
-                self.curr_char = '\n';
+                self.curr_char = '\0';
                 return;
             }
             self.pos += 1;
@@ -237,7 +238,7 @@ impl Lexer {
         for _ in 0..times {
             if self.pos == 0 {
                 self.d_pos.1 = 0;
-                self.curr_char = self.source.chars().nth(0).unwrap_or('\n');
+                self.curr_char = self.source.chars().nth(0).unwrap_or('\0');
                 return;
             }
             self.pos -= 1;
