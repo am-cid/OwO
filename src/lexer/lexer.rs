@@ -257,7 +257,8 @@ impl Lexer {
             self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\n')
         }
     }
-    fn peek_reserved(&mut self, expected: TokenType) -> Result<(), ()> {
+    // TOKENIZERS
+    fn peek_symbol(&mut self, expected: TokenType) -> Result<(), ()> {
         let expect_str = expected.to_str();
         let (line, start, end) = (self.d_pos.0, self.d_pos.1, self.d_pos.1);
         for i in 0..expect_str.len() {
@@ -267,38 +268,12 @@ impl Lexer {
             }
             self.advance(1);
         }
-        if !expected.delims().contains(&self.curr_char) {
-            if atoms("alpha_num").contains(&self.curr_char)
-                || !expect_str.chars().all(|c| atoms("alpha_num").contains(&c))
-            {
-                self.reverse(expect_str.len());
-                return Err(());
-            }
-            self.errors.push(
-                DelimError::new(
-                    reserved_to_token_type(expect_str),
-                    expected.delims(),
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            return Err(());
-        }
-        let (line, start, end) = match expect_str {
-            "\r" | "\n" => (line, start, end),
-            _ => (
-                self.d_pos.0,
-                self.d_pos.1 - expect_str.len(),
-                self.d_pos.1 - 1,
-            ),
+        let end = match expect_str {
+            "\r" | "\n" | "\t" | " " => end,
+            _ => self.d_pos.1 - 1,
         };
-        self.tokens.push(
-            to_token(expect_str, (line, start), (line, end))
-                .map_err(|e| e.to_string())
-                .unwrap(),
-        );
+        self.tokens
+            .push(Token::from(expect_str, (line, start), (line, end)));
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
