@@ -275,30 +275,34 @@ impl TokenType {
             Self::Return => "\r",
         }
     }
-        match self {
-            Self::SingleLineComment => delim_set,
-            _ => {
-                delim_set.extend(atoms("whitespace"));
-                delim_set
-            }
-        }
-    }
 }
 
-pub fn atoms(key: &str) -> HashSet<char> {
-    match key {
-        "num" => ('1'..='9').collect(),
-        "number" => ('0'..='9').collect(),
-        "alpha_small" => ('a'..='z').collect(),
-        "alpha_big" => ('A'..='Z').collect(),
-        "alpha" => ('a'..='z').chain('A'..='Z').collect(),
-        "alpha_num" => ('a'..='z').chain('A'..='Z').chain('0'..='9').collect(),
-        "arith_op" => HashSet::from(['+', '-', '*', '/', '%']),
-        "gen_op" => HashSet::from(['+', '-', '*', '/', '%', '>', '<', '=']),
-        "whitespace" => HashSet::from([' ', '\n', '\t', '\r']),
-        // all ascii characters (non-extended)
-        "all" => ('\x00'..='\x7F').collect(),
-        _ => HashSet::new(),
+pub enum Atoms {
+    AlphaNum,
+    Symbols,
+    Whitespace,
+}
+impl Atoms {
+    pub fn charset(&self) -> HashSet<char> {
+        match self {
+            Self::AlphaNum => ('a'..='z')
+                .chain('A'..='Z')
+                .chain('0'..='9')
+                .chain(HashSet::from(['_']))
+                .collect(),
+            Self::Symbols => HashSet::from([
+                '+', '-', '*', '/', '%', '^', '>', '<', '=', '|', '&', '!', '(', ')', '[', ']',
+                '{', '}', '.', '?', ',', '~', '"',
+            ]),
+            Self::Whitespace => HashSet::from([' ', '\n', '\t', '\r']),
+        }
+    }
+    pub fn combine(atoms: &[Atoms]) -> HashSet<char> {
+        let mut res = HashSet::new();
+        for atom in atoms {
+            res.extend(atom.charset());
+        }
+        res
     }
 }
 
