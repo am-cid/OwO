@@ -308,15 +308,15 @@ impl Atoms {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
-    kind: TokenType,
-    text: &'static str,
-    pos: (usize, usize),
-    end_pos: (usize, usize),
+    pub kind: TokenType,
+    pub text: &'static str,
+    pub pos: (usize, usize),
+    pub end_pos: (usize, usize),
 }
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} of type {}", self.text, self.kind)
+        write!(f, "{}", self.text)
     }
 }
 
