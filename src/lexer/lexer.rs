@@ -84,117 +84,72 @@ impl Lexer {
         while self.pos < self.source.len() {
             match self.curr_char {
                 ' ' => self
-                    .peek_reserved(TokenType::Whitespace)
+                    .peek_symbol(TokenType::Whitespace)
                     .unwrap_or_else(|_| ()),
-                '\t' => self.peek_reserved(TokenType::Tab).unwrap_or_else(|_| ()),
-                '\r' => self.peek_reserved(TokenType::Return).unwrap_or_else(|_| ()),
-                '\n' => self
-                    .peek_reserved(TokenType::Newline)
-                    .unwrap_or_else(|_| ()),
-                'b' => self
-                    .peek_reserved(TokenType::Bweak)
-                    .unwrap_or(self.peek_ident()),
-                'c' => self
-                    .peek_reserved(TokenType::Chan)
-                    .or_else(|_| self.peek_reserved(TokenType::Cap))
-                    .or_else(|_| self.peek_reserved(TokenType::Cwass))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'd' => self
-                    .peek_reserved(TokenType::Dono)
-                    .or_else(|_| self.peek_reserved(TokenType::DoWhiwe))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'e' => self
-                    .peek_reserved(TokenType::EwseIwf)
-                    .or_else(|_| self.peek_reserved(TokenType::Ewse))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'f' => self
-                    .peek_reserved(TokenType::Fow)
-                    .or_else(|_| self.peek_reserved(TokenType::Fax))
-                    .or_else(|_| self.peek_reserved(TokenType::Fwunc))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'g' => self
-                    .peek_reserved(TokenType::Gwobaw)
-                    .unwrap_or(self.peek_ident()),
-                'i' => self
-                    .peek_reserved(TokenType::Iwf)
-                    .or_else(|_| self.peek_reserved(TokenType::Inpwt))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'm' => self
-                    .peek_reserved(TokenType::Mainuwu)
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'n' => self
-                    .peek_reserved(TokenType::Nuww)
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'p' => self
-                    .peek_reserved(TokenType::Pwint)
-                    .unwrap_or_else(|_| self.peek_ident()),
-                's' => self
-                    .peek_reserved(TokenType::San)
-                    .or_else(|_| self.peek_reserved(TokenType::Senpai))
-                    .or_else(|_| self.peek_reserved(TokenType::Sama))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'w' => self
-                    .peek_reserved(TokenType::Whiwe)
-                    .or_else(|_| self.peek_reserved(TokenType::Wetuwn))
-                    .unwrap_or_else(|_| self.peek_ident()),
-                'a'..='z' | 'A'..='Z' => self.peek_ident(),
-                '0'..='9' => self.peek_int(),
-                '"' => self.peek_string(),
-                // TODO: peek string part mid/end instead of unit for pipe |
-                '|' => self
-                    .peek_reserved(TokenType::Or)
-                    .unwrap_or_else(|_| self.peek_string()),
-                '&' => self.peek_reserved(TokenType::And).unwrap_or_else(|_| ()),
-                '=' => self
-                    .peek_reserved(TokenType::Equal)
-                    .or_else(|_| self.peek_reserved(TokenType::Assign))
+                '\t' => self.peek_symbol(TokenType::Tab).unwrap_or_else(|_| ()),
+                '\r' => self.peek_symbol(TokenType::Return).unwrap_or_else(|_| ()),
+                '\n' => self.peek_symbol(TokenType::Newline).unwrap_or_else(|_| ()),
+                '+' => self
+                    .peek_symbol(TokenType::PlusEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Plus))
                     .unwrap_or_else(|_| ()),
                 '-' => self
-                    .peek_reserved(TokenType::Decrement)
-                    .or_else(|_| self.peek_reserved(TokenType::Dash))
-                    .unwrap_or_else(|_| ()),
-                '!' => self.peek_reserved(TokenType::NotEqual).unwrap_or_else(|_| {
-                    self.errors.push(
-                        UnknownTokenError::new(
-                            self.source.lines().nth(self.d_pos.0).unwrap(),
-                            self.d_pos,
-                        )
-                        .message(),
-                    );
-                    self.advance(1);
-                }),
-                '<' => self
-                    .peek_reserved(TokenType::LessEqual)
-                    .or_else(|_| self.peek_reserved(TokenType::LessThan))
-                    .unwrap_or_else(|_| ()),
-                '>' => self
-                    .peek_multi_line_comment()
-                    .or_else(|_| self.peek_single_line_comment())
-                    .or_else(|_| self.peek_reserved(TokenType::GreaterEqual))
-                    .or_else(|_| self.peek_reserved(TokenType::GreaterThan))
+                    .peek_symbol(TokenType::DashEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Dash))
                     .unwrap_or_else(|_| ()),
                 '*' => self
-                    .peek_reserved(TokenType::Multiply)
+                    .peek_symbol(TokenType::MultiplyEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Multiply))
                     .unwrap_or_else(|_| ()),
-                '/' => self.peek_reserved(TokenType::Divide).unwrap_or_else(|_| ()),
-                '%' => self.peek_reserved(TokenType::Modulo).unwrap_or_else(|_| ()),
-                '{' => self.peek_reserved(TokenType::LBrace).unwrap_or_else(|_| ()),
-                '}' => self.peek_reserved(TokenType::RBrace).unwrap_or_else(|_| ()),
-                '(' => self.peek_reserved(TokenType::LParen).unwrap_or_else(|_| ()),
-                ')' => self.peek_reserved(TokenType::RParen).unwrap_or_else(|_| ()),
-                '[' => self
-                    .peek_reserved(TokenType::DoubleLBracket)
-                    .or_else(|_| self.peek_reserved(TokenType::LBracket))
+                '/' => self
+                    .peek_symbol(TokenType::DivideEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Divide))
                     .unwrap_or_else(|_| ()),
-                ']' => self
-                    .peek_reserved(TokenType::DoubleRBracket)
-                    .or_else(|_| self.peek_reserved(TokenType::RBracket))
+                '%' => self
+                    .peek_symbol(TokenType::ModuloEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Modulo))
                     .unwrap_or_else(|_| ()),
-                ',' => self.peek_reserved(TokenType::Comma).unwrap_or_else(|_| ()),
-                '.' => self.peek_reserved(TokenType::Dot).unwrap_or_else(|_| ()),
+                '^' => self
+                    .peek_symbol(TokenType::ExponentEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Exponent))
+                    .unwrap_or_else(|_| ()),
+                '<' => self
+                    .peek_symbol(TokenType::LessEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::LessThan))
+                    .unwrap_or_else(|_| ()),
+                '>' => self
+                    .peek_single_line_comment()
+                    .or_else(|_| self.peek_symbol(TokenType::GreaterEqual))
+                    .or_else(|_| self.peek_symbol(TokenType::GreaterThan))
+                    .unwrap_or_else(|_| ()),
+                '=' => self
+                    .peek_symbol(TokenType::Equal)
+                    .or_else(|_| self.peek_symbol(TokenType::Assign))
+                    .unwrap_or_else(|_| ()),
+                '!' => self
+                    .peek_symbol(TokenType::NotEqual)
+                    .or_else(|_| self.peek_symbol(TokenType::Bang))
+                    .unwrap_or_else(|_| ()),
+                '(' => self.peek_symbol(TokenType::LParen).unwrap_or_else(|_| ()),
+                ')' => self.peek_symbol(TokenType::RParen).unwrap_or_else(|_| ()),
+                '[' => self.peek_symbol(TokenType::LBracket).unwrap_or_else(|_| ()),
+                ']' => self.peek_symbol(TokenType::RBracket).unwrap_or_else(|_| ()),
+                '{' => self.peek_symbol(TokenType::LBrace).unwrap_or_else(|_| ()),
+                '}' => self
+                    .peek_string()
+                    .or_else(|_| self.peek_symbol(TokenType::RBrace))
+                    .unwrap_or_else(|_| ()),
+                '.' => self.peek_symbol(TokenType::Dot).unwrap_or_else(|_| ()),
+                '?' => self.peek_symbol(TokenType::Question).unwrap_or_else(|_| ()),
+                ',' => self.peek_symbol(TokenType::Comma).unwrap_or_else(|_| ()),
+                '|' => self.peek_symbol(TokenType::Pipe).unwrap_or_else(|_| ()),
                 '~' => self
-                    .peek_reserved(TokenType::Terminator)
+                    .peek_symbol(TokenType::Terminator)
                     .unwrap_or_else(|_| ()),
+                'a'..='z' | 'A'..='Z' => self.peek_ident(),
+                '0'..='9' => self.peek_int(),
+                '"' => self.peek_string().unwrap_or_else(|_| ()),
+                '\'' => self.peek_char_lit().unwrap_or_else(|_| ()),
                 _ => {
                     self.errors.push(
                         UnknownTokenError::new(
