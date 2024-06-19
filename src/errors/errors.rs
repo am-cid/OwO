@@ -30,19 +30,19 @@ impl DelimError {
         }
     }
 }
-
 impl CompilerError for DelimError {
     fn message(&self) -> String {
         let mut msg: String = "".to_string();
         let title = match self.token_type {
-            TokenType::FloatLiteral => "FLOAT LITERAL",
-            TokenType::IntLiteral => "INTEGER LITERAL",
-            TokenType::StringLiteral => "STRING LITERAL",
             TokenType::Identifier => "IDENTIFIER",
-            TokenType::ClassId => "CLASS ID",
+            TokenType::Type => "TYPE",
+            TokenType::IntLiteral => "INTEGER LITERAL",
+            TokenType::FloatLiteral => "FLOAT LITERAL",
+            TokenType::StringLiteral => "STRING LITERAL",
             TokenType::StringPartStart => "STRING PART START",
             TokenType::StringPartMid => "STRING PART MID",
             TokenType::StringPartEnd => "STRING PART END",
+            TokenType::CharLiteral => "CHAR LITERAL",
             _ => self.token_type.to_str(),
         };
         msg.push_str(format!("[UNDELIMITED {}]", title).as_str());
@@ -56,18 +56,20 @@ impl CompilerError for DelimError {
                         match c {
                             '\n' => "'NEWLINE'".to_string(),
                             '\t' => "'TAB'".to_string(),
+                            '\r' => "'CARRIAGE RETURN'".to_string(),
                             ' ' => "'SPACE'".to_string(),
                             _ => format!("'{}'", c),
                         }
                     })
                     .collect::<Vec<String>>()
-                    .join(", ")
+                    .join(", "),
             )
             .as_str(),
         );
         let actual = match self.actual {
             '\n' => "NEWLINE".to_string(),
             '\t' => "TAB".to_string(),
+            '\r' => "'CARRIAGE RETURN'".to_string(),
             ' ' => "SPACE".to_string(),
             _ => format!("{}", self.actual),
         };
@@ -87,13 +89,11 @@ pub struct UnknownTokenError {
     line_text: &'static str,
     pos: (usize, usize),
 }
-
 impl UnknownTokenError {
     pub fn new(line_text: &'static str, pos: (usize, usize)) -> Self {
         Self { line_text, pos }
     }
 }
-
 impl CompilerError for UnknownTokenError {
     fn message(&self) -> String {
         let mut msg: String = "".to_string();
@@ -114,3 +114,66 @@ impl CompilerError for UnknownTokenError {
         msg
     }
 }
+
+pub struct UnclosedStringError {
+    actual: char,
+    line_text: &'static str,
+    start_pos: (usize, usize),
+    length: usize,
+}
+impl UnclosedStringError {
+    pub fn new(
+        actual: char,
+        line_text: &'static str,
+        start_pos: (usize, usize),
+        length: usize,
+    ) -> Self {
+        Self {
+            actual,
+            line_text,
+            start_pos,
+            length: length + 1,
+        }
+    }
+}
+impl CompilerError for UnclosedStringError {
+    fn message(&self) -> String {
+        let mut msg: String = "".to_string();
+        msg.push_str(
+            format!(
+                "[UNCLOSED STRING] at line {}, col {}\n",
+                self.start_pos.0, self.start_pos.1
+            )
+            .as_str(),
+        );
+        msg.push_str(format!("    Expected any in: '\"', '}}'\n").as_str());
+        msg.push_str(
+            format!(
+                "    Got: '{}'\n",
+                match self.actual {
+                    '\n' => "NEWLINE",
+                    '\r' => "CARRIAGE RETURN",
+                    _ => unreachable!(),
+                }
+            )
+            .as_str(),
+        );
+        let line_length = self.line_text.len();
+        let border = "-".repeat(line_length);
+        let highlight = " ".repeat(self.start_pos.1) + &"^".repeat(self.length);
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg.push_str(
+            format!(
+                "{:width$} | {}\n",
+                self.start_pos.0,
+                self.line_text,
+                width = 3
+            )
+            .as_str(),
+        );
+        msg.push_str(format!("    | {}\n", highlight).as_str());
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg
+    }
+}
+
