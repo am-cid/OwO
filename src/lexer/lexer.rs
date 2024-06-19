@@ -225,15 +225,6 @@ impl Lexer {
             self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\n');
         }
     }
-    fn expect_peek_char_is(&mut self, expected: char) -> bool {
-        match expected == self.peek_char {
-            true => {
-                self.advance(1);
-                true
-            }
-            false => false,
-        }
-    }
     fn reverse(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos == 0 {
