@@ -323,60 +323,11 @@ impl Lexer {
             self.advance(1);
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-    fn peek_multi_line_comment(&mut self) -> Result<(), ()> {
-        let mut tmp: String = "".to_string();
-        let start_pos = (self.d_pos.0, self.d_pos.1);
-        if !self.expect_peek_char_is('/') {
-            return Err(());
-        }
-        if !self.expect_peek_char_is('/') {
-            self.reverse(1);
-            return Err(());
-        }
-        if !self.expect_peek_char_is('<') {
-            self.reverse(2);
-            return Err(());
-        }
-        self.advance(1); // consume the <
-
-        tmp.push_str(">//<");
-        loop {
-            // stop conditions
-            // no closing >//<
-            if self.pos >= self.source.len() - 1 {
-                tmp.push(self.curr_char);
-                break;
-            }
-            // has closing >//<
-            if self.curr_char == '>' {
-                if !self.expect_peek_char_is('/') {
-                    tmp.push('>');
-                    self.advance(1);
-                    continue;
-                }
-                if !self.expect_peek_char_is('/') {
-                    tmp.push_str(">/");
-                    self.advance(1);
-                    continue;
-                }
-                if !self.expect_peek_char_is('<') {
-                    tmp.push_str(">//");
-                    self.advance(1);
-                    continue;
-                }
-                tmp.push_str(">//<");
-                break;
-            }
-            tmp.push(self.curr_char);
-            self.advance(1)
-        }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(token, start_pos, self.d_pos)
-                .map_err(|e| e.to_string())
-                .unwrap(),
-        );
-        self.advance(1);
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
         Ok(())
     }
     fn peek_int(&mut self) -> () {
