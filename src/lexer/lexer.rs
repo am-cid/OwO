@@ -302,31 +302,17 @@ impl Lexer {
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
-        let delims = match self.curr_char.is_lowercase() {
-            true => TokenType::Identifier.delims(),
-            false => TokenType::ClassId.delims(),
-        };
-        let mut tmp: String = "".to_string();
-        let mut times = 0;
-        while !delims.contains(&self.curr_char) {
-            if !atoms("alpha_num").contains(&self.curr_char) {
-                // TODO: delim error
-                self.reverse(times);
-                return;
-            }
+        let mut tmp = String::new();
+        while self.curr_char_can_be_ident() {
             tmp.push(self.curr_char);
             self.advance(1);
-            times += 1;
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(
-                token,
-                (self.d_pos.0, self.d_pos.1 - token.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .unwrap(),
-        );
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
     }
     fn peek_single_line_comment(&mut self) -> Result<(), ()> {
         let mut tmp: String = "".to_string();
@@ -558,5 +544,7 @@ impl Lexer {
             .map_err(|e| e.to_string())
             .unwrap(),
         )
+    fn curr_char_can_be_ident(&self) -> bool {
+        self.curr_char.is_ascii_alphanumeric() || self.curr_char == '_'
     }
 }
