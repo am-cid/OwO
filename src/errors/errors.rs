@@ -209,3 +209,60 @@ impl CompilerError for SingleBracketError {
     }
 }
 
+pub struct UnclosedCharError {
+    actual: char,
+    line_text: &'static str,
+    start_pos: (usize, usize),
+}
+impl UnclosedCharError {
+    pub fn new(actual: char, line_text: &'static str, start_pos: (usize, usize)) -> Self {
+        Self {
+            actual,
+            line_text,
+            start_pos,
+        }
+    }
+}
+impl CompilerError for UnclosedCharError {
+    fn message(&self) -> String {
+        let mut msg: String = "".to_string();
+        msg.push_str(
+            format!(
+                "[UNCLOSED CHARACTER] at line {}, col {}\n",
+                self.start_pos.0, self.start_pos.1
+            )
+            .as_str(),
+        );
+        msg.push_str(format!("    Expected \"'\"\n").as_str());
+        let actual = self.actual.to_string();
+        msg.push_str(
+            format!(
+                "    Got: \"{}\"\n",
+                match self.actual {
+                    ' ' => "WHITESPACE",
+                    '\n' => "NEWLINE",
+                    '\t' => "TAB",
+                    '\r' => "CARRIAGE RETURN",
+                    _ => actual.as_str(),
+                }
+            )
+            .as_str(),
+        );
+        let line_length = self.line_text.len();
+        let border = "-".repeat(line_length);
+        let highlight = " ".repeat(self.start_pos.1 - 2) + &"^^^";
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg.push_str(
+            format!(
+                "{:width$} | {}\n",
+                self.start_pos.0,
+                self.line_text,
+                width = 3
+            )
+            .as_str(),
+        );
+        msg.push_str(format!("    | {}\n", highlight).as_str());
+        msg.push_str(format!("------{}\n", border).as_str());
+        msg
+    }
+}
