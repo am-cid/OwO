@@ -331,19 +331,35 @@ impl Lexer {
         Ok(())
     }
     fn peek_int(&mut self) -> () {
-        let mut tmp: String = "".to_string();
-        while atoms("number").contains(&self.curr_char) {
+        let mut tmp: String = String::new();
+        let delims = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]);
+        while self.curr_char.is_ascii_digit() || self.curr_char == '_' {
             tmp.push(self.curr_char);
             self.advance(1);
+        }
+        // ended with _
+        if tmp.chars().last().unwrap_or_default() == '_' {
+            self.reverse(1);
+            self.errors.push(
+                DelimError::new(
+                    TokenType::IntLiteral,
+                    delims,
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            );
+            return;
         }
         if self.curr_char == '.' {
             return self.peek_float(tmp);
         }
-        if !TokenType::IntLiteral.delims().contains(&self.curr_char) {
+        if !delims.contains(&self.curr_char) {
             self.errors.push(
                 DelimError::new(
                     TokenType::IntLiteral,
-                    TokenType::IntLiteral.delims(),
+                    delims,
                     self.curr_char,
                     self.source.lines().nth(self.d_pos.0).unwrap(),
                     self.d_pos,
@@ -353,35 +369,13 @@ impl Lexer {
             return;
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(
-                token,
-                (self.d_pos.0, self.d_pos.1 - token.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap(),
-        );
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
     }
-    /// must be called after peek_int since it requires the digits before the .
-    fn peek_float(&mut self, before: String) -> () {
-        let mut tmp = before;
-        tmp.push('.');
-        self.advance(1); // consume the .
-        if !atoms("number").contains(&self.curr_char) {
-            self.errors.push(
-                DelimError::new(
-                    TokenType::FloatLiteral,
-                    atoms("number"),
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            return;
-        }
-        while atoms("number").contains(&self.curr_char) {
+    /// must be called after peek_int since it requires the digits before the decimal point
             tmp.push(self.curr_char);
             self.advance(1);
         }
