@@ -335,8 +335,110 @@ impl Token {
         }
     }
 }
+    pub fn from(text: &'static str, pos: (usize, usize), end_pos: (usize, usize)) -> Self {
+        let kind = match text {
+            "chan" => TokenType::Chan,
+            "kun" => TokenType::Kun,
+            "senpai" => TokenType::Senpai,
+            "kouhai" => TokenType::Kouhai,
+            "san" => TokenType::San,
+            "sama" => TokenType::Sama,
+            "dono" => TokenType::Dono,
+            "+" => TokenType::Plus,
+            "-" => TokenType::Dash,
+            "*" => TokenType::Multiply,
+            "/" => TokenType::Divide,
+            "%" => TokenType::Modulo,
+            "^" => TokenType::Exponent,
+            "+=" => TokenType::PlusEqual,
+            "-=" => TokenType::DashEqual,
+            "*=" => TokenType::MultiplyEqual,
+            "/=" => TokenType::DivideEqual,
+            "%=" => TokenType::ModuloEqual,
+            "^=" => TokenType::ExponentEqual,
+            "<" => TokenType::LessThan,
+            ">" => TokenType::GreaterThan,
+            "<=" => TokenType::LessEqual,
+            ">=" => TokenType::GreaterEqual,
+            "and" => TokenType::And,
+            "or" => TokenType::Or,
+            "not" => TokenType::Not,
+            "==" => TokenType::Equal,
+            "!=" => TokenType::NotEqual,
+            "=" => TokenType::Assign,
+            "(" => TokenType::LParen,
+            ")" => TokenType::RParen,
+            "[" => TokenType::LBracket,
+            "]" => TokenType::RBracket,
+            "{" => TokenType::LBrace,
+            "}" => TokenType::RBrace,
+            "." => TokenType::Dot,
+            "?" => TokenType::Question,
+            "!" => TokenType::Bang,
+            "," => TokenType::Comma,
+            "|" => TokenType::Pipe,
+            "~" => TokenType::Terminator,
+            " " => TokenType::Whitespace,
+            "\t" => TokenType::Tab,
+            "\r" => TokenType::Return,
+            "\n" => TokenType::Newline,
+            "hi" => TokenType::Hi,
+            "main" => TokenType::Main,
+            "fun" => TokenType::Fun,
+            "gwoup" => TokenType::Group,
+            "contwact" => TokenType::Contract,
+            "wetuwn" => TokenType::Wetuwn,
+            "in" => TokenType::In,
+            "assewt" => TokenType::Assewt,
+            "uwu" => TokenType::Uwu,
+            "pwint" => TokenType::Pwint,
+            "inpwt" => TokenType::Inpwt,
+            "iwf" => TokenType::Iwf,
+            "ewse" => TokenType::Ewse,
+            "ewif" => TokenType::Ewif,
+            "mash" => TokenType::Mash,
+            "default" => TokenType::Default,
+            "fow" => TokenType::Fow,
+            "continue" => TokenType::Continue,
+            "bweak" => TokenType::Bweak,
+            "fax" => TokenType::Fax,
+            "cap" => TokenType::Cap,
+            "nuww" => TokenType::Nuww,
+            _ if text.chars().nth(0) == Some('"') => match text.chars().last() {
                 Some('"') => TokenType::StringLiteral,
+                Some('{') => TokenType::StringPartStart,
+                _ => unreachable!(),
+            },
+            _ if text.chars().nth(0) == Some('}') => match text.chars().last() {
                 Some('"') => TokenType::StringPartEnd,
+                Some('{') => TokenType::StringPartMid,
+                _ => unreachable!(),
+            },
+            _ if text.starts_with(|c: char| c.is_alphabetic() && c.is_lowercase()) => {
+                TokenType::Identifier
+            }
+            _ if text.starts_with(|c: char| c.is_alphanumeric() && c.is_uppercase()) => {
+                TokenType::Type
+            }
+            _ if text.chars().nth(0) == Some('\'') && text.chars().last() == Some('\'') => {
+                TokenType::CharLiteral
+            }
+            _ if text.chars().all(|c| c.is_ascii_digit() || c == '_') => TokenType::IntLiteral,
+            _ if text.starts_with(|c: char| c.is_ascii_digit())
+                && text
+                    .chars()
+                    .skip(1)
+                    .all(|c| c.is_ascii_digit() || c == '.' || c == '_')
+                && text.chars().last() != Some('.')
+                && text.chars().filter(|c| *c == '.').count() == 1 =>
+            {
+                TokenType::FloatLiteral
+            }
+            _ if text.starts_with(">.<") => TokenType::SingleLineComment,
+            _ => unreachable!("Unknown token: {}", text),
+        };
+        Token {
+            kind,
             text: text.into(),
             pos,
             end_pos,
