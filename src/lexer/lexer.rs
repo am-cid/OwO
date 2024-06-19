@@ -251,7 +251,7 @@ impl Lexer {
                     0 => 0,
                     _ => self.d_pos.0 - 1,
                 };
-                self.d_pos.0 = self.source.lines().nth(self.d_pos.1).unwrap_or("").len();
+                self.d_pos.1 = self.source.lines().nth(self.d_pos.1).unwrap_or("").len() - 1;
             }
             self.peek_char = self.curr_char;
             self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\n')
