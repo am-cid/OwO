@@ -1,16 +1,14 @@
 use crate::errors::errors::{CompilerError, DelimError, UnknownTokenError};
 use crate::lexer::token::{atoms, reserved_to_token_type, to_token, Token, TokenType};
+use crate::lexer::token::{Atoms, Token, TokenType};
 use std::fmt;
 
 pub struct Lexer {
     pub source: &'static str,
-
     pub tokens: Vec<Token>,
     pub errors: Vec<String>,
-
     pub curr_char: char,
     pub peek_char: char,
-
     pub pos: usize,
     pub d_pos: (usize, usize),
 }
@@ -29,7 +27,7 @@ impl Lexer {
     pub fn new(source: &'static str) -> Lexer {
         let mut source_iter = source.chars();
         let first_char = source_iter.next().expect("source is empty");
-        let second_char = source_iter.next().expect("source is empty");
+        let second_char = source_iter.next().unwrap_or('\0');
         Lexer {
             source,
             tokens: vec![],
