@@ -315,33 +315,14 @@ impl Lexer {
         ));
     }
     fn peek_single_line_comment(&mut self) -> Result<(), ()> {
-        let mut tmp: String = "".to_string();
-        if !self.expect_peek_char_is('.') {
-            return Err(());
-        }
-        if !self.expect_peek_char_is('<') {
-            self.reverse(1); // TODO: add error here, not reverse
-            return Err(());
-        }
-        self.advance(1); // consume the <
-
-        tmp.push_str(">.<");
-        while self.curr_char != '\r' && self.curr_char != '\n' {
+        let mut tmp = ">.".to_string();
+        self.expect_peek_char_is('.', 0)?;
+        self.expect_peek_char_is('<', 1)?;
+        while !['\n', '\r'].contains(&self.curr_char) {
             tmp.push(self.curr_char);
             self.advance(1);
         }
         let token: &'static str = Box::leak(tmp.into_boxed_str());
-        self.tokens.push(
-            to_token(
-                token,
-                (self.d_pos.0, self.d_pos.1 - token.len()),
-                (self.d_pos.0, self.d_pos.1 - 1),
-            )
-            .map_err(|e| e.to_string())
-            .unwrap(),
-        );
-        Ok(())
-    }
     fn peek_multi_line_comment(&mut self) -> Result<(), ()> {
         let mut tmp: String = "".to_string();
         let start_pos = (self.d_pos.0, self.d_pos.1);
