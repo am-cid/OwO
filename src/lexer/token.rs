@@ -5,92 +5,116 @@ use std::fmt;
 pub enum TokenType {
     // ids
     Identifier,
-    ClassId,
+    Type,
+
     // dtypes
-    Chan,
-    Kun,
-    Senpai,
-    Sama,
-    San,
-    // string and array concat op
-    Concat,
-    // unary ops
-    Increment,
-    Decrement,
+    Chan,   // int
+    Kun,    // float
+    Senpai, // string
+    Kouhai, // char
+    San,    // null
+    Sama,   // bool
+    Dono,   // any
+
     // arith ops
     Plus,
     Dash,
     Multiply,
     Divide,
     Modulo,
+    Exponent,
+
+    // shorthand arith ops
+    PlusEqual,
+    DashEqual,
+    MultiplyEqual,
+    DivideEqual,
+    ModuloEqual,
+    ExponentEqual,
+
     // rel ops
     LessThan,
-    LessEqual,
     GreaterThan,
+    LessEqual,
     GreaterEqual,
+
     // boolean ops
     And,
     Or,
+    Not,
+
     // equality ops
     Equal,
     NotEqual,
+
     // assignment
     Assign,
+
     // enclosures
     LParen,
     RParen,
     LBracket,
     RBracket,
-    DoubleLBracket,
-    DoubleRBracket,
     LBrace,
     RBrace,
-    // method/property access
-    Dot,
-    // general symbols
-    Comma,
-    Terminator,
 
-    // keywords
-    // general
-    Gwobaw,
-    Mainuwu,
-    Fwunc,
-    Cwass,
-    Wetuwn,
-    Dono,
-    // io
-    Pwint,
-    Inpwt,
-    // control flow
-    Iwf,
-    Ewse,
-    EwseIwf,
-    // loop constructs
-    Whiwe,
-    DoWhiwe,
-    Fow,
-    Bweak,
-    // literals
-    StringLiteral,
-    StringPartStart,
-    StringPartMid,
-    StringPartEnd,
-    IntLiteral,
-    FloatLiteral,
-    Fax,
-    Cap,
-    Nuww,
-    // end of file
+    // etc
+    Dot,      // method/property access
+    Question, // optional
+    Bang,     // const
+    Comma,
+    Pipe,
+
+    // delimiters
+    Terminator,
     EOF,
-    // comments
-    SingleLineComment,
-    MultiLineComment,
-    // whitespace
     Whitespace,
     Tab,
     Newline,
     Return,
+
+    /// keywords
+    // general
+    Hi,
+    Main,
+    Fun,
+    Group,
+    Contract,
+    Wetuwn,
+    In,
+    Assewt,
+    Uwu,
+
+    // io
+    Pwint,
+    Inpwt,
+
+    // control flow
+    Iwf,
+    Ewse,
+    Ewif,
+    Mash,
+    Default,
+
+    // loop constructs
+    Fow,
+    Bweak,
+    Continue,
+
+    // literals
+    IntLiteral,
+    FloatLiteral,
+    Fax, // True
+    Cap, // False
+    StringLiteral,
+    StringPartStart,
+    StringPartMid,
+    StringPartEnd,
+    CharLiteral,
+    Nuww, // None
+
+    // comments
+    SingleLineComment,
 }
 
 impl fmt::Display for TokenType {
