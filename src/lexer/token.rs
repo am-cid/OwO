@@ -207,36 +207,43 @@ impl TokenType {
         match self {
             // non-reserved words/symbols
             Self::SingleLineComment
-            | Self::MultiLineComment
             | Self::IntLiteral
             | Self::FloatLiteral
             | Self::StringLiteral
             | Self::Identifier
-            | Self::ClassId
+            | Self::Type
             | Self::StringPartStart
             | Self::StringPartMid
             | Self::StringPartEnd
+            | Self::CharLiteral
             | Self::EOF => "\0",
             // reserved words/symbols
             Self::Chan => "chan",
             Self::Kun => "kun",
             Self::Senpai => "senpai",
-            Self::Sama => "sama",
+            Self::Kouhai => "kouhai",
             Self::San => "san",
-            Self::Concat => "&",
-            Self::Increment => "++",
-            Self::Decrement => "--",
+            Self::Sama => "sama",
+            Self::Dono => "dono",
             Self::Plus => "+",
             Self::Dash => "-",
             Self::Multiply => "*",
             Self::Divide => "/",
             Self::Modulo => "%",
+            Self::Exponent => "^",
+            Self::PlusEqual => "+=",
+            Self::DashEqual => "-=",
+            Self::MultiplyEqual => "*=",
+            Self::DivideEqual => "/=",
+            Self::ModuloEqual => "%=",
+            Self::ExponentEqual => "^=",
             Self::LessThan => "<",
-            Self::LessEqual => "<=",
             Self::GreaterThan => ">",
+            Self::LessEqual => "<=",
             Self::GreaterEqual => ">=",
-            Self::And => "&&",
-            Self::Or => "||",
+            Self::And => "and",
+            Self::Or => "or",
+            Self::Not => "not",
             Self::Equal => "==",
             Self::NotEqual => "!=",
             Self::Assign => "=",
@@ -244,35 +251,40 @@ impl TokenType {
             Self::RParen => ")",
             Self::LBracket => "[",
             Self::RBracket => "]",
-            Self::DoubleLBracket => "[[",
-            Self::DoubleRBracket => "]]",
             Self::LBrace => "{",
             Self::RBrace => "}",
             Self::Dot => ".",
+            Self::Question => "?",
+            Self::Bang => "!",
             Self::Comma => ",",
+            Self::Pipe => "|",
             Self::Terminator => "~",
-            Self::Gwobaw => "gwobaw",
-            Self::Mainuwu => "mainuwu",
-            Self::Fwunc => "fwunc",
-            Self::Cwass => "cwass",
-            Self::Wetuwn => "wetuwn",
-            Self::Dono => "dono",
-            Self::Pwint => "pwint",
-            Self::Inpwt => "inpwt",
-            Self::Iwf => "iwf",
-            Self::Ewse => "ewse",
-            Self::EwseIwf => "ewse iwf",
-            Self::Whiwe => "whiwe",
-            Self::DoWhiwe => "do whiwe",
-            Self::Fow => "fow",
-            Self::Bweak => "bweak",
-            Self::Fax => "fax",
-            Self::Cap => "cap",
-            Self::Nuww => "nuww",
             Self::Whitespace => " ",
             Self::Tab => "\t",
             Self::Newline => "\n",
             Self::Return => "\r",
+            Self::Hi => "hi",
+            Self::Main => "main",
+            Self::Fun => "fun",
+            Self::Group => "gwoup",
+            Self::Contract => "contwact",
+            Self::Wetuwn => "wetuwn",
+            Self::In => "in",
+            Self::Assewt => "assewt",
+            Self::Uwu => "uwu",
+            Self::Pwint => "pwint",
+            Self::Inpwt => "inpwt",
+            Self::Iwf => "iwf",
+            Self::Ewse => "ewse",
+            Self::Ewif => "ewif",
+            Self::Mash => "mash",
+            Self::Default => "default",
+            Self::Fow => "fow",
+            Self::Continue => "continue",
+            Self::Bweak => "bweak",
+            Self::Fax => "fax",
+            Self::Cap => "cap",
+            Self::Nuww => "nuww",
         }
     }
 }
@@ -334,7 +346,6 @@ impl Token {
             end_pos,
         }
     }
-}
     pub fn from(text: &'static str, pos: (usize, usize), end_pos: (usize, usize)) -> Self {
         let kind = match text {
             "chan" => TokenType::Chan,
