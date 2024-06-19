@@ -544,6 +544,19 @@ impl Lexer {
             .map_err(|e| e.to_string())
             .unwrap(),
         )
+    // HELPER METHODS
+    fn expect_peek_char_is(&mut self, expected: char, reverse_count: usize) -> Result<(), ()> {
+        match expected == self.peek_char {
+            true => {
+                self.advance(1);
+                Ok(())
+            }
+            false => {
+                self.reverse(reverse_count);
+                Err(())
+            }
+        }
+    }
     fn curr_char_can_be_ident(&self) -> bool {
         self.curr_char.is_ascii_alphanumeric() || self.curr_char == '_'
     }
