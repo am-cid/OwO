@@ -56,10 +56,8 @@ impl Command for Lex {
         );
         let mut l = Lexer::new(source);
         l.tokenize();
-        l.tokens
-            .into_iter()
-            .for_each(|token| println!("{:?}", token));
-        l.errors.into_iter().for_each(|err| println!("{:?}", err));
+        l.pretty_print_tokens(false);
+        l.errors.into_iter().for_each(|err| println!("{}", err));
         Ok(())
     }
 }

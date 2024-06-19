@@ -38,6 +38,48 @@ impl Lexer {
             d_pos: (0, 0),
         }
     }
+    pub fn pretty_print_tokens(&self, with_whitespace: bool) -> () {
+        let width = 64;
+        println!(" {}", "-".repeat(width));
+        println!("|        kind       |         text         |       position      |");
+        println!("|-------------------|----------------------|---------------------|");
+        for token in &self.tokens {
+            if [
+                TokenType::Whitespace,
+                TokenType::Tab,
+                TokenType::Return,
+                TokenType::Newline,
+            ]
+            .contains(&token.kind)
+                && !with_whitespace
+            {
+                continue;
+            }
+            println!(
+                "| {: ^17} | {: ^20} | ({: <2}, {: >2}) - ({: <2}, {: >2}) |",
+                token.kind.to_string(),
+                match token.text {
+                    " " => "space".to_string(),
+                    "\t" => "tab".to_string(),
+                    "\r" => "return".to_string(),
+                    "\n" => "newline".to_string(),
+                    _ => {
+                        let printed = token.text.to_string();
+                        if printed.len() > 20 {
+                            printed[0..17].to_string() + "..."
+                        } else {
+                            printed
+                        }
+                    }
+                },
+                token.pos.0,
+                token.pos.1,
+                token.end_pos.0,
+                token.end_pos.1,
+            );
+        }
+        println!(" {}", "-".repeat(width));
+    }
     pub fn tokenize(&mut self) -> () {
         while self.pos < self.source.len() {
             match self.curr_char {
