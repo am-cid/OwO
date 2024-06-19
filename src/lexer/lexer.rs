@@ -503,6 +503,55 @@ impl Lexer {
         ));
         Ok(())
     }
+    fn peek_char_lit(&mut self) -> Result<(), ()> {
+        let mut tmp: String = self.curr_char.to_string();
+        self.advance(1);
+        tmp.push(self.curr_char);
+        if self.curr_char != '\'' {
+            self.advance(1);
+            match self.curr_char {
+                '\'' => {
+                    tmp.push(self.curr_char);
+                }
+                _ => {
+                    self.errors.push(
+                        UnclosedCharError::new(
+                            self.curr_char,
+                            self.source.lines().nth(self.d_pos.0).unwrap(),
+                            self.d_pos,
+                        )
+                        .message(),
+                    );
+                    self.advance(1);
+                    return Err(());
+                }
+            }
+        }
+        self.advance(1);
+        let delims = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]);
+        if !delims.contains(&self.curr_char) {
+            self.errors.push(
+                DelimError::new(
+                    TokenType::CharLiteral,
+                    delims,
+                    self.curr_char,
+                    self.source.lines().nth(self.d_pos.0).unwrap(),
+                    self.d_pos,
+                )
+                .message(),
+            );
+            self.advance(1);
+            return Err(());
+        }
+        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        self.tokens.push(Token::from(
+            token,
+            (self.d_pos.0, self.d_pos.1 - token.len()),
+            (self.d_pos.0, self.d_pos.1 - 1),
+        ));
+        Ok(())
+    }
+
     // HELPER METHODS
     fn expect_peek_char_is(&mut self, expected: char, reverse_count: usize) -> Result<(), ()> {
         match expected == self.peek_char {
