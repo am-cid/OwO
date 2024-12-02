@@ -1,3 +1,10 @@
+use crate::errors::lex_errors::CompilerError;
+use crate::lexer::token::{Token, TokenKind};
+use crate::parser::data_types::{DataType, MapType, SetType, VecType, Vectorable};
+use crate::parser::identifiers::*;
+use crate::parser::productions::*;
+use std::collections::HashMap;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default)]
 enum Precedence {
     #[default]
