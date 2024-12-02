@@ -6,7 +6,7 @@ pub struct Version {
 }
 impl Command for Version {
     fn help_msg(verbose: bool) {
-        let mut title = "version".to_string().pad_right(16).fill_left(2).bold();
+        let mut title = "version".pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
@@ -14,18 +14,13 @@ impl Command for Version {
             "{}{}{}\n",
             title,
             "prints the current version of",
-            " OwO".to_string().bold()
+            " OwO".bold(),
         );
         if verbose {
             println!(
                 "\n{}{}",
-                "Usage:"
-                    .to_string()
-                    .pad_right(15)
-                    .bold()
-                    .underline()
-                    .fill_left(2),
-                "owo version".to_string()
+                "Usage:".pad_right(15).bold().underline().fill_left(2),
+                "owo version",
             );
         }
     }

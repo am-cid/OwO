@@ -11,7 +11,7 @@ pub struct Analyze {
 }
 impl Command for Analyze {
     fn help_msg(verbose: bool) {
-        let mut title = "analyze".to_string().pad_right(16).fill_left(2).bold();
+        let mut title = "analyze".pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
@@ -19,22 +19,20 @@ impl Command for Analyze {
             "{}{}\n{}{}\n",
             title,
             "Analyzes a selected source file for semantic errors.",
-            "Outputs success/fail messages for each "
-                .to_string()
-                .fill_left(18),
-            "test case.".to_string().italic()
+            "Outputs success/fail messages for each ".fill_left(18),
+            "test case.".italic()
         );
         if verbose {
             println!(
                 "{}\n{}\n{}",
-                "The test cases are the ff:".to_string().fill_left(18),
-                "- Member Check".to_string().fill_left(22),
-                "- Type Check".to_string().fill_left(22),
+                "The test cases are the ff:".fill_left(18),
+                "- Member Check".fill_left(22),
+                "- Type Check".fill_left(22),
             );
             print!(
                 "\n{}{}",
-                "Usage:".to_string().bold().underline().fill_left(2),
-                "owo analyze path/to/source.uwu".to_string().fill_left(10)
+                "Usage:".bold().underline().fill_left(2),
+                "owo analyze path/to/source.uwu".fill_left(10)
             );
         }
     }

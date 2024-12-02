@@ -1,7 +1,8 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
 use crate::{
     cli::commands::Command,
+    lexer::{lexer::Lexer, token::TokenKind},
     utils::{path::PathExt, string::StringExt},
 };
 
@@ -11,7 +12,7 @@ pub struct Parse {
 }
 impl Command for Parse {
     fn help_msg(verbose: bool) {
-        let mut title = "parse".to_string().pad_right(16).fill_left(2).bold();
+        let mut title = "parse".pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
@@ -19,15 +20,13 @@ impl Command for Parse {
             "{}{}\n{}\n",
             title,
             "Parses a selected source file.",
-            "Outputs an abstract syntax tree (AST)."
-                .to_string()
-                .fill_left(18),
+            "Outputs an abstract syntax tree (AST).".fill_left(18),
         );
         if verbose {
             println!(
                 "\n{}{}",
-                "Usage:".to_string().bold().underline().fill_left(2),
-                "owo parse path/to/source.uwu".to_string().fill_left(10),
+                "Usage:".bold().underline().fill_left(2),
+                "owo parse path/to/source.uwu".fill_left(10),
             );
         }
     }

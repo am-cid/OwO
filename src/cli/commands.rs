@@ -29,8 +29,8 @@ pub fn to_command(
 }
 pub fn tokenize(args: Vec<String>) -> Result<Box<dyn Command>, String> {
     let mut args_iter = args.into_iter();
-    let command = args_iter.next().unwrap_or("".to_string());
-    let arg = args_iter.next().unwrap_or("".to_string());
+    let command = args_iter.next().unwrap_or_default();
+    let arg = args_iter.next().unwrap_or_default();
     let flags = match args_iter.len() {
         0 => None,
         _ => Some(args_iter.collect()),
