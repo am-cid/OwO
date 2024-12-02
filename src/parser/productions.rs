@@ -1,5 +1,6 @@
 use crate::lexer::token::{Token, TokenKind};
 use crate::parser::data_types::DataType;
+use crate::parser::identifiers::{Accessor, Assignable, Identifier, Indexable};
 use crate::utils::string::StringExt;
 
 /// Max width of the [FnCall] args before falling back to vertical formatting.
