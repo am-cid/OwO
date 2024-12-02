@@ -6,7 +6,8 @@ Language Design is overhauled to have support for optional types, immutable vari
 - [Hello World](#hello-world)
 - [IO](#io)
 - [Declaration and Assignment](#declaration-and-assignment)
-- [Function Declaration and Calling](#function-declaration-and-calling)<br><br>
+- [Function Declaration and Calling](#function-declaration-and-calling)
+- [Variadic Parameters](#variadic-parameters)<br><br>
 - [Type System](#type-system)
     - [Primitive Types](#primitive-types)
     - [Optional Type](#optional-type)
@@ -15,8 +16,8 @@ Language Design is overhauled to have support for optional types, immutable vari
     - [Groups](#groups)
     - [Contracts](#contracts)<br><br>
 - [Control Flow](#control-flow)
-    - [Mash](#mash)
     - [If-Else](#if-else)
+    - [Mash](#mash)
     - [Loops](#loops)
         - [For Loop](#for-loop)
         - [For Each](#for-each)<br><br>
@@ -25,11 +26,10 @@ Language Design is overhauled to have support for optional types, immutable vari
 ---
 
 # Hello World
-All programs must have a main function
-- must have no arguments
-- must return nothing (aka return type `san`)
+All programs must have a main function that takes no arguments and return
+nothing nothing (aka return type `san`)
 ```kotlin
->.< this is a comment
+>_< this is a comment
 
 fun main-san() {
     pwint("hello", "world")~
@@ -37,29 +37,23 @@ fun main-san() {
 ```
 output: `hello world`
 # IO
-Printing to console can be done using the builtin `pwint` function.
-- takes a variable amount of arguments of any type.
-- each argument is separated by space when printed.
+`pwint` takes a variable amount of arguments of any type. Args are separated by
+space when printed
 
-Taking input from user can be done using the builtin `inpwt` function.
-- takes a variable amount of arguments of any type
-- args will be printed to the console as the prompt
-- will read user input until the user presses enter.
-- user input will be implicitly converted to the type declared if `inpwt()` is
-the right hand side of a declaration/assignment
-- `inpwt()` can also be a standalone statement, not needing to be on the right hand side of a declaration/assignment
+`inpwt` takes one argument only of any type, and will return a string value.
+Arg will be printed to the console as the prompt, and will read user input
+until the user presses enter.
 
 ```kotlin
->.< this is a comment
+>_< this is a comment
 
 fun main-san() {
-    >.< name is mutable, inpwt is implicitly converted to senpai
-    name-senpai! = inpwt("what is your first name?: ")~
+    hi name-senpai = inpwt("what is your first name?: ")~
     pwint("hello", name, "\n")~
 
-    >.< inpwt is implicitly converted to senpai even in assignments
-    name = inpwt("what is your last name?: ")~
-    pwint(name, "is a nice surname\n")~
+    >_< inpwt returns string so it must be converted
+    hi age-chan = inpwt("what is your age?: ").to_chan().unwrap()~
+    pwint(surname, "was my age a few weeks ago!\n")~
 
     inpwt("Press Enter to exit...")~
 }
@@ -69,30 +63,21 @@ output:
 what is your name?: owo
 hello owo
 
-what is your last name?: uwu
-uwu is a nice surname
+what is your last name?: 1000
+1000 was my age a few weeks ago!
 
 Press Enter to exit...
 ```
 # Declaration and Assignment
-1. Variable declarations are in the format:<br>
-`hi name-type = value~`<br>
-
-2. Variables are immutable by default. To declare mutable variables, put a `!` after the type:<br>
-`hi name-type! = value~`
-
-3. Assignments are done in the format:<br>
-`name = value~`.
-
 ```kotlin
->.< this is mutable
+>_< declare mutable variables by putting ! after the type
 hi global-chan! = 99~ 
 
 fun main-san() {
-    >.< this is constant
+    >_< declarations are immutable by default
     hi num-chan = 1~ 
 
-    >.< reassigning global variable
+    >_< reassigning global variable
     global = 0~
     pwint(global, num, global_2)~
 }
@@ -101,23 +86,55 @@ hi global_2-chan = 2~
 ```
 output: `0 1 2`
 # Function Declaration and Calling
-Function declarations are in the format:<br>
-`fun name-type(param-type, param2-type, ...params) { ... }`<br>
-where:
 ```kotlin
->.< this is a comment
+>_< this is a comment
 
 fun main-san() {
     pwint(sum(2,3))~
 }
 
->.< args: one immutable and one mutable int
->.< returns: int
+>_< args: immutable int and mutable int
+>_< returns: int
 fun sum-chan(left-chan, right-chan!) {
+    >_< change value of mutable int
+    right += 1~
     wetuwn left + right~
 }
 ```
 output: `5`
+# Variadic Parameters
+- Functions can take in any number of arguments given a **variadic parameter**
+is declared as the last parameter to a function/method.
+- Add `...` after the type: `names-senpai...`
+- The variadic parameter is equivalent to a vector one dimension higher than the
+declared type
+    - `names-senpai...` == `names-senpai[1]`
+    - `names-senpai[1]...` == `names-senpai[2]`
+    - `names-senpai{dono}...` == `names-senpai{dono}[1]`
+- The main difference is when calling the function/method
+    - `names-senpai...`: `hello_to("aqua", "shion", "ojou")~`
+    - `names-senpai[1]`: `hello_to(["aqua", "shion", "ojou"])~`
+```kotlin
+>_< builtin fowmat function
+fun fowmat-senpai(string-senpai, vars-Stringable...) {
+    fow var in vars {
+        string.replace("{}", var.string())~
+    }
+    wetuwn string~
+}
+
+fun main-san() {
+    hi world-senpai = "world"~
+    pwint(
+        fowmat(
+            "{}, {}!",
+            "hello",
+            world,
+        )
+    )~
+}
+```
+output: `hello, world!`
 
 # Type System
 ## Primitive Types
@@ -132,6 +149,11 @@ output: `5`
 3. `senpai`: string<br>
     declaration: `hi ojou-senpai = "hi"~`<br>
     `senpai` literals are enclosed in `"`<br>
+    - indexing into a `senpai` value returns a `kouhai` value
+    ```
+    hi aqua-senpai = "hello"~
+    hi pe-kouhai = aqua[1]~
+    ```
 <br>
 
 4. `kouhai`: char<br>
@@ -145,8 +167,8 @@ output: `5`
 <br>
 
 5. `san`: null
-    - used for functions that never return anything
-    - identifiers that have this type can only have the value `nuww` (null)<br>
+    - used for functions that return `nuww` (null) or never returns
+    - identifiers that have this type can only have the value `nuww`<br>
     function declaration: `fun main-san() { ... }`<br>
     declaration: `hi aqua-san = nuww~`<br>
 <br>
@@ -156,44 +178,50 @@ output: `5`
     `hi shion-dono = 1~`<br>
     `hi ojou-dono = "hello"~`<br>
     - `dono` can be downcasted to any other type using a [`mash`](#mash) statement
+    - `dono` values cannot be used like other types (eg. adding a `dono` value to a `chan` value)
+    - `dono` alone means any type, even [optional types](#optional-type) and [collection types](#collection-types)
 
 ## Optional Type
-- to declare a variable with an optional type, use the `?` symbol in the format: `hi name-type?`
-- the value of an option type can either be a value satisfying the type declared or `nuww`
-- note that you would still have to `.unwrap()` or `.unwrap_or()` to use the value
 ```kotlin
->.< optional chan can have an int or nuww as a value
+>_< declare an optional type by putting ? after the type
+>_< optional chan can have an int or nuww as a value
 hi aqua-chan? = 1~
 hi shion-chan? = nuww~
 
->.< adding ! before or after ? turns it into an mutable optional variable
+>_< adding ! before ? turns it into an optional variable that is mutable
 hi ojou-senpai!? = "hello"~
-ojou = nuww~
+ojou = nuww~ 
 
 assewt(aqua.unwrap_or(0) + shion.unwrap_or(0) == 1)~
 assewt(ojou.unwrap_or(0) == 0)~
+
+>_< this will cause an error since the current value is nuww
+ojou.unwrap()
 ```
 
 ## Collection Types
-### Collections
 1. **vector**
-    - defined as `type[dim]` where `type` is any type and `dim` is an integer literal<br>
-    - note that `dim` cannot be an identifier<br>
-    - vector literals must be enclosed in square brackets: `[item]`
-    - to get an item from a vector, use:
-        1. `.nth()` method: `aqua.nth(1)`
-            - `aqua.nth(1)` gets the first item
-            - this returns an optional type where you have to `.unwrap()`
-            to use the value
-        2. subscript operator `[]`: `aqua[1]`
-            - `aqua[1]` gets the first item
-            - `aqua[1]` is equivalent to `aqua.nth(1).unwrap()`
+
+    Defined as `type[dim]` where `type` is any type and `dim` is an integer
+    literal. Note that `dim` cannot be an identifier. Vector literals must be
+    enclosed in square brackets: `[item]`. Other collection types can be vector
+    items.
+
+    To get an item from a vector, use:
+    1. `.nth()` method
+        - `aqua.nth(1)` gets the first item.
+        - `aqua.nth(1, 2)` gets the second item (inner) of the first item (outer)
+        - returns an optional type
+    2. subscript operator `[]`
+        - `aqua[1]` gets the first item (equivalent to `aqua.nth(1).unwrap()`)
+        - `aqua[1, 2]` is equivalent to `aqua.nth(1, 2).unwrap()`
     ```kotlin
-    aqua-chan[1] = [1, 2, 3]~
-    shion-chan[2] = [[1,2], [3,4], [5,6]]~
+    hi aqua-chan[1] = [1, 2, 3]~
+    hi shion-chan[2] = [[1,2], [3,4], [5,6]]~
 
     assewt(aqua.nth(1).unwrap() == 1)~
-    assewt(shion[1][2] == 2)~
+    assewt(shion[1, 2] == 2)~
+    assewt(shion[1, 2] == shion.nth(1, 2).unwrap())~
 
     pwint(aqua)~
     ```
@@ -201,171 +229,186 @@ assewt(ojou.unwrap_or(0) == 0)~
     ```
     [1, 2, 3]
     ```
-<br>
 
-2. **set**
-    - defined as `type{}` where `type` is any type<br>
-    - set literals must be enclosed in curly brackets `{item}`
-    - a set ensures only unique items are in the set even if user put 
-    in duplicates
-    - you cannot get items from a set
+2. **hashset**
+
+    Defined as `type{}` where `type` is any builtin owo type or any type that
+    implements the `Hashable` contract. Hashset literals must be enclosed in
+    brackets starting with hash: `#[item]`. Empty hashset literals are written
+    as: `#[]`. A hashset ensures only unique items are in the hashset even if
+    user put in duplicates. You cannot put other collection types into a
+    hashset.
+
+    You cannot get items from a hashset.
     ```kotlin
-    aqua-senpai{} = { "1", "1", "2", "3" }~
-    pwint(aqua)~
+    hi aqua-senpai{} = #[ "1", "1", "2", "3" ]~
+    >_< empty set
+    hi shion-chan{} = #[]~
+    >_< 1D vector of hashsets of floats
+    ojou-kun{}[1] = [
+        #[1.0, 1.0],
+        #[2.0, 3.0],
+    ]~
+    >_< while kun{}[1] is a valid type, kun[1]{} is not
+    >_< since collections cannot be put into hashsets
+
+    pwint(aqua, "\n", shion, "\n", ojou)~
     ```
     output
     ```
-    {"1", "2", "3"}
+    #["1", "2", "3"]
+    #[]
+    [#[1.0], #[2.0, 3.0]]
     ```
-<br>
 
-3. **map**
-    - defined as `key{val}` where both `key` and `val` are any type<br>
-    - map literals must be enclosed in curly brackets with key and value separated by colon `{key:val}`
-    - to get an item from a map, use:
-        1. `.get()` method: `aqua.get("item")`
-            - this returns an optional type where you have to `.unwrap()`
-            to use the value
-        2. subscript operator `[]`: `aqua["item"]`
-            - `aqua["item"]` is equivalent to `aqua.get("item").unwrap()`
+3. **hashmap**
+
+    Defined as `key{val}` where `val` is any type. `key` is any builtin owo
+    type or any type that implements the `Hashable` contract. Hashmap literals
+    must be enclosed in brackets starting with hash with key and value
+    separated by colon `#[key:val]`. Empty hashmap literals are written as:
+    `#[:]`. Colon signifies its a hashmap, not a hashset. You cannot put
+    collection types as keys.
+
+    To get an item from a hashmap, use:
+    1. `.get()` method
+        - `aqua.get("item")` gets the value associated with the key `"item"`
+        - returns an optional type
+    2. subscript operator `[]`
+        - `aqua["item"]` is equivalent to `aqua.get("item").unwrap()`
     ```kotlin
-    ojou-senpai{chan} = { "id":1, "age":18 }~
-    lap-sama{kun[1]} = { fax:[1.0, 2.0], cap:[3.0, 4.0] }~
-
+    ojou-senpai{chan} = #["id": 1, "age": 18 ]~
     assewt(ojou.get("age").unwrap() == 18)~
+
+    >_< 1D vector of hashmaps of chan:kun
+    peko-chan{kun}[1] = [
+        #[1: 2.0, 2: 1.0],
+        #[9: 5.0, 5: 9.0],
+    ]~
+    >_< while chan{kun}[1] is a valid type, chan[1]{kun} is not
+    >_< since collections cannot be keys for hashmaps
+    >_< chan{kun[1]} is valid though, like below
+
+    lap-sama{kouhai[1]} = #[fax: ['1', 'c'], cap: ['2', 'd']]~
     assewt(lap[fax] == [1.0, 2.0])~
 
-    pwint(ojou)~
+    shuba-kouhai{san} = #[:]~ >_< empty hashmap
+    pwint(ojou, shuba)~
     ```
     output
     ```
-    {"id": 1, "age": 18}~
+    #["id": 1, "age": 18] #[:]
     ```
 # User Defined Types
 ## Groups
-1. Groups are user defined types with fields and methods<br>
-2. Format:
-    - start with `gwoup` keyword followed by name starting with capital letter
-    - optional [contracts](#contracts) implemented enclosed in `[]`
-    - body enclosed in `{}`<br>
-<br>
-
-3. Inside body, user can declare fields and methods
-    - fields format: `name-type~`<br>
-    - methods format: `fun name-type(uwu, ...params) { ... }`<br>
-<br>
-
-4. Methods need mandatory `uwu` or `uwu!` as first argument. These lets you access fields and other methods
-    - `uwu!` means the method might mutate the state of the group<br>
-    - `uwu` as a parameter means the method does not mutate the state of the group
-        - within the method, user can only use other methods that also take in `uwu`
-        - user cannot assign to properties or use methods that take in `uwu!`<br>
-<br>
-
-5. Declare a variable with a `cwass` type in this format:<br>
-`hi name-class = class(...fields)~`
-    - all fields must be initialized
+Groups are user defined types with fields and methods.
 ```kotlin
->.< this group does not implement any contracts
 gwoup Sample {
     property-chan~
-
-    >.< method that does not mutate state
-    fun method-san(uwu) {
-        >.< accessing fields
-        pwint(uwu.property)~
-    }
-
-    >.< method that mutates state
-    fun method2-san(uwu!, val-chan) {
-        uwu.property = uwu.property + uwu.property2~
-        uwu.property2 = val~
-    }
-
-    >.< there is no strict order in whether fields or methods should be defined first
     property2-chan~
 }
+>_< methods are defined outside gwoup definition
+
+>_< method definition. properties can be accessed using the uwu keyword
+fun Sample print_property-san() {
+    >_< accessing fields
+    pwint(uwu.property)~
+}
+
+>_< define a method that modifies state by putting ! after the gwoup name
+fun Sample! modify_state-san(val-chan) {
+    uwu.property = uwu.property + val~
+    uwu.print_property()~
+    uwu.property2 = val~
+}
 
 fun main-san() {
+    >_< all fields must be initialized
     hi test-Sample = Sample(1,2)~
-    test.method()~
-    test.method2(3)~
+    test.print_property()~
+    test.modify_state(3)~
+    pwint(test.property2)~
 }
+```
+output
+```
+1
+4
+3
 ```
 ## Contracts
-1. Contracts define methods that `gwoups` must implement if put in a group's definition
-2. Format:<br>
-    - start with `contwact` keyword
-    - then identifier that starts with a capital letter
-    - then body enclosed in `{}`<br>
-<br>
-
-3. Inside body, user can declare methods
-    - format: `name-type(self, ...params)~`
-    - methods here have no body, just the signature<br>
-<br>
-
-4. variables can have a `contract` type
+Contracts define methods that `gwoups` must implement if put in a group's definition
 ```
 contwact Contract1 {
-    method-san(self)~
+    method-san(kun, senpai)~
 }
+
+>_< enclose contracts to be implemented in [] after the gwoup name
 gwoup Sample [Contract1] {
     property-chan~
-
-    fun method-san(uwu) {
-        pwint(uwu.property)~
-    }
 }
+
+>_< method definition to satisfy Contract1
+fun Sample method-san(a-kun, b-senpai) {
+    pwint(uwu.property, a, b)~
+}
+
 fun main-san() {
-    >.< this variable has a contract as a type
+    >_< this variable has a contract as a type
     hi test-Contract1 = Sample(1)~
 
-    >.< can access methods defined in the contract
-    test.method()~
+    >_< can access methods defined in the contract
+    test.method(2.0 , "three")~
 
-    >.< but cannot access the fields of `Sample`
-    pwint(test.property)~ >.< this will error
+    >_< but cannot access the fields of `Sample`
+    pwint(test.property)~ >_< this will error
 }
 
->.< this group does not fully implement the contract Contract1
->.< this will cause a compile time error
+>_< this group does not fully implement the contract Contract1
+>_< this will cause a compile time error
 gwoup Sample2 [Contract1] {
     property-chan~
 }
 ```
+output
+```
+1 2.0 three
+```
 
-# Control Flow
-## Mash
-Used for deconstructing a variable's `contract`/`dono` type down to the implementors
-- `mash` is exhaustive, needing the `default` case if not all implementors have a case
-- in the default case, the type is not downcasted
+# String Formatting
+`fowmat`
+- first argument must be of type `senpai` which may or may not contain
+formatting specifiers: `{}`
+    - to escape braces, do: `{{` or `}}`
+- following arguments are to be put in place of the formatting specifiers (`{}`)
+    - following arguments' type must be a builtin owo type or implement the
+    `Stringable` contract
+    - missing arguments will cause a runtime error
+    - extra arguments will be ignored
 ```kotlin
->.< this example will deconstruct the `dono` (any) type
 fun main-san() {
-    hi potato-dono = "string"~
-    mash potato {
-        chan {
-            pwint(potato + 1)~
-        }
-        kun {
-            pwint(potato / 2.2)~
-        }
-        senpai {
-            assewt(potato.len() == 6)~
-        }
-        default {
-            >.< in this default case, dono is not downcasted and is still any
-            pwint(potato)~
-        }
-    }
+    hi name-senpai = "aqua"~
+    hi age-chan = 18~
+    hi blood_type-kouhai = '?'~
+    
+    >_< fowmat returns senpai
+    sentence-senpai = fowmat(
+        "My name is Minato {}! I am {} years old and my blood type is {}????",
+        name,
+        age,
+        blood_type,
+    )~
+    pwint(sentence)~
 }
 ```
+output: `My name is Minato aqua! I am 18 years old and my blood type is ?????`
+
+# Control Flow
 ## If-Else
 Use `iwf`, `ewse`, and `ewif` for branching.
 ```kotlin
 fun main-san() {
-    aqua-chan = inpwt("input a number: ")~
+    hi aqua-chan = inpwt("input a number: ")~
     iwf aqua > 1 {
         pwint(aqua, "is less than 1")
     } ewif aqua == 1 {
@@ -380,30 +423,58 @@ output:
 input a number: 3
 3 is more than 1
 ```
+## Mash
+Used for downcasting a variable's `contract`/`dono` type down to the
+implementors. Each case only takes one type argument since union types do not
+exist in owo. Cases are not fallthrough. `mash` is exhaustive, needing the
+`default` case if not all implementors have a case. In the default case, the
+type is not downcasted.
+```kotlin
+>_< this example will deconstruct the `dono` (any) type
+fun main-san() {
+    hi potato-dono = "string"~
+    mash potato {
+    chan:
+        hi tato-kun = potato.to_float()~
+        pwint(tato)~
+    kun:
+        pwint(fowmat(
+                "{} was originally: {}",
+                potato.to_int(),
+                potato,
+            )
+        )~
+    senpai:
+        assewt(potato.len() == 6)~
+        pwint("correct!")~
+    default:
+        >_< in this default case, dono is not downcasted and is still any
+        pwint(potato)~
+    }
+}
+```
+output: `correct!`
 ## Loops
 ### For Loop
-Format is:<br>
-`fow init~condition~update { ... }`<br>
+`fow init~ condition~ update { ... }`
 where:
 - `init` is the initial value declaration
-- `condition` is the stop condition
-- `update` is the update assigned to the initial value
+- `condition` is the stop condition of the for loop
+- `update` is the update assigned to the initial value after each iteration
 ```kotlin
->.< this is a comment
-
 fun main-san() {
-    >.< print 1 to 3
+    >_< print 1 to 3
     fow hi i-chan! = 1~ i <= 3~ i+1 {
         pwint(i)~
     }
     pwint()~
     
-    >.< keep prompting the user until they type "owo"
+    >_< keep prompting the user until they type "owo"
     fow hi a-senpai! = ""~
         a == "owo"~
         inpwt("input owo: ")
     {
-        pwint("'", a, "'")~
+        fowmat("'{}'", a)~
     }
     pwint("\ndone")~
 }
@@ -416,22 +487,20 @@ output:
 
 '  '
 input owo: no
-' no '
+'no'
 input owo: NO!
-' NO! '
+'NO!'
 input owo: owo
-' owo '
+'owo'
 
 done!
 ```
 ### For Each
-Format is:<br>
-`fow item in collection { ... }`<br>
-where:
+`fow item in collection { ... }` where:
 - `item` is the variable name for each item in the collection
-- `collection` is the collection
+- `collection` is the collection where its type must be a [collection type](#collection-types)
 ```kotlin
->.< this is a comment
+>_< this is a comment
 
 fun main-san() {
     fow num in [1,2,3,4,5] {
@@ -448,36 +517,37 @@ output:
 5
 ```
 # Assertions
-Assertions are in the format: `assewt(<condition>)~`
-- builtin `assewt` function takes only one `sama` (bool) argument
-- will crash the program if the condition is false
+`assewt(<condition>)~` takes only one `sama` (bool) argument and will crash the
+program if the condition is false
 ```kotlin
->.< this will crash the program
+>_< this will crash the program
 assewt(1 == 2)~
 ```
 output: `Assertion failed: 1 == 2`
 # Function Pipeline
 `|` operator can be used to chain functions.
-Result from the left hand side is passed as the first argument to the right hand side
+Result from the left hand side is passed as the first argument to the right hand side. Pipeline expressions must start with a variable or fn/method call, not literals or infix/prefix expressions
 ```kotlin
 fun main-san() {
     hi aqua-chan = 2~
     aqua | pow(4) | pwint()~
-    >.< equivalent to: pwint(pow(aqua, 4))~
+    >_< equivalent to: pwint(pow(aqua, 4))~
 
     totally_random_vec_of_nums()
     | filter_evens()
     | sort_ascending()
     | pwint()~
-    >.< equivalent to: pwint(sort_ascending(filter_evens(totally_random_vec_of_nums())))
+    >_< equivalent to: pwint(sort_ascending(filter_evens(totally_random_vec_of_nums())))
 }
 
 fun pow-chan(num-chan, exp-chan) {
     wetuwn num ^ exp~
 }
+
 fun totally_random_vec_of_nums-chan[1]() {
     wetuwn [6,5,4,3,2,1]~
 }
+
 fun filter_evens-chan[1](vec-chan[1]) {
     hi res-chan[1]! = []~
     fow num in vec {
@@ -486,6 +556,7 @@ fun filter_evens-chan[1](vec-chan[1]) {
         }
     }
 }
+
 fun sort_ascending-chan[1](vec-chan[1]) {
     hi res-chan[1]! = vec~
     fow hi i-chan = 1~ i < res.len()~ i+1 {
@@ -497,3 +568,4 @@ fun sort_ascending-chan[1](vec-chan[1]) {
     }
     wetuwn res~
 }
+```
