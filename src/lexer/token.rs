@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TokenType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TokenKind {
     // ids
     Identifier,
     Type,
@@ -24,7 +24,7 @@ pub enum TokenType {
     Modulo,
     Exponent,
 
-    // shorthand arith ops
+    // shorthand arith assign ops
     PlusEqual,
     DashEqual,
     MultiplyEqual,
@@ -62,32 +62,28 @@ pub enum TokenType {
     Dot,      // method/property access
     Question, // optional
     Bang,     // const
+    Ellipsis, // variadic parameter
     Comma,
+    Colon,
+    Hash,
     Pipe,
-
-    // delimiters
     Terminator,
+    #[default]
     EOF,
+
+    // whitespace
     Whitespace,
     Tab,
     Newline,
-    Return,
+    CarriageReturn,
 
     /// keywords
-    // general
-    Hi,
-    Main,
-    Fun,
-    Group,
-    Contract,
-    Wetuwn,
-    In,
-    Assewt,
-    Uwu,
-
-    // io
-    Pwint,
-    Inpwt,
+    Hi, // declaration
+    Main,     // main func keyword
+    Fun,      // function
+    Group,    // class
+    Contract, // interface
+    Wetuwn,   // return
 
     // control flow
     Iwf,
@@ -95,11 +91,13 @@ pub enum TokenType {
     Ewif,
     Mash,
     Default,
+    Assewt, // assertions
 
     // loop constructs
     Fow,
     Bweak,
     Continue,
+    In, // create iterator over collection types only in for loops
 
     // literals
     IntLiteral,
@@ -107,17 +105,14 @@ pub enum TokenType {
     Fax, // True
     Cap, // False
     StringLiteral,
-    StringPartStart,
-    StringPartMid,
-    StringPartEnd,
     CharLiteral,
     Nuww, // None
 
     // comments
-    SingleLineComment,
+    Comment,
 }
 
-impl fmt::Display for TokenType {
+impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Identifier => write!(f, "Identifier"),
@@ -160,61 +155,55 @@ impl fmt::Display for TokenType {
             Self::Dot => write!(f, "Dot"),
             Self::Question => write!(f, "Question"),
             Self::Bang => write!(f, "Bang"),
+            Self::Ellipsis => write!(f, "Ellipsis"),
             Self::Comma => write!(f, "Comma"),
+            Self::Colon => write!(f, "Colon"),
+            Self::Hash => write!(f, "Hash"),
             Self::Pipe => write!(f, "Pipe"),
             Self::Terminator => write!(f, "Terminator"),
             Self::EOF => write!(f, "EOF"),
             Self::Whitespace => write!(f, "Whitespace"),
             Self::Tab => write!(f, "Tab"),
             Self::Newline => write!(f, "Newline"),
-            Self::Return => write!(f, "Return"),
+            Self::CarriageReturn => write!(f, "Return"),
             Self::Hi => write!(f, "Hi"),
             Self::Main => write!(f, "Main"),
             Self::Fun => write!(f, "Fun"),
             Self::Group => write!(f, "Group"),
             Self::Contract => write!(f, "Contract"),
             Self::Wetuwn => write!(f, "Wetuwn"),
-            Self::In => write!(f, "In"),
-            Self::Assewt => write!(f, "Assewt"),
-            Self::Uwu => write!(f, "Uwu"),
-            Self::Pwint => write!(f, "Pwint"),
-            Self::Inpwt => write!(f, "Inpwt"),
             Self::Iwf => write!(f, "Iwf"),
             Self::Ewse => write!(f, "Ewse"),
             Self::Ewif => write!(f, "Ewif"),
             Self::Mash => write!(f, "Mash"),
             Self::Default => write!(f, "Default"),
+            Self::Assewt => write!(f, "Assewt"),
             Self::Fow => write!(f, "Fow"),
             Self::Bweak => write!(f, "Bweak"),
             Self::Continue => write!(f, "Continue"),
+            Self::In => write!(f, "In"),
             Self::IntLiteral => write!(f, "IntLiteral"),
             Self::FloatLiteral => write!(f, "FloatLiteral"),
             Self::Fax => write!(f, "Fax"),
             Self::Cap => write!(f, "Cap"),
             Self::StringLiteral => write!(f, "StringLiteral"),
-            Self::StringPartStart => write!(f, "StringPartStart"),
-            Self::StringPartMid => write!(f, "StringPartMid"),
-            Self::StringPartEnd => write!(f, "StringPartEnd"),
             Self::CharLiteral => write!(f, "CharLiteral"),
             Self::Nuww => write!(f, "Nuww"),
-            Self::SingleLineComment => write!(f, "SingleLineComment"),
+            Self::Comment => write!(f, "Comment"),
         }
     }
 }
 
-impl TokenType {
+impl TokenKind {
     pub fn to_str(&self) -> &'static str {
         match self {
             // non-reserved words/symbols
-            Self::SingleLineComment
+            Self::Comment
             | Self::IntLiteral
             | Self::FloatLiteral
             | Self::StringLiteral
             | Self::Identifier
             | Self::Type
-            | Self::StringPartStart
-            | Self::StringPartMid
-            | Self::StringPartEnd
             | Self::CharLiteral
             | Self::EOF => "\0",
             // reserved words/symbols
@@ -256,32 +245,32 @@ impl TokenType {
             Self::Dot => ".",
             Self::Question => "?",
             Self::Bang => "!",
+            Self::Ellipsis => "...",
             Self::Comma => ",",
+            Self::Colon => ":",
+            Self::Hash => "#",
             Self::Pipe => "|",
             Self::Terminator => "~",
             Self::Whitespace => " ",
             Self::Tab => "\t",
             Self::Newline => "\n",
-            Self::Return => "\r",
+            Self::CarriageReturn => "\r",
             Self::Hi => "hi",
             Self::Main => "main",
             Self::Fun => "fun",
             Self::Group => "gwoup",
             Self::Contract => "contwact",
             Self::Wetuwn => "wetuwn",
-            Self::In => "in",
-            Self::Assewt => "assewt",
-            Self::Uwu => "uwu",
-            Self::Pwint => "pwint",
-            Self::Inpwt => "inpwt",
             Self::Iwf => "iwf",
             Self::Ewse => "ewse",
             Self::Ewif => "ewif",
             Self::Mash => "mash",
             Self::Default => "default",
+            Self::Assewt => "assewt",
             Self::Fow => "fow",
             Self::Continue => "continue",
             Self::Bweak => "bweak",
+            Self::In => "in",
             Self::Fax => "fax",
             Self::Cap => "cap",
             Self::Nuww => "nuww",
@@ -304,9 +293,9 @@ impl Atoms {
                 .collect(),
             Self::Symbols => HashSet::from([
                 '+', '-', '*', '/', '%', '^', '>', '<', '=', '|', '&', '!', '(', ')', '[', ']',
-                '{', '}', '.', '?', ',', '~', '"',
+                '{', '}', '.', '?', ',', '~', '"', ':',
             ]),
-            Self::Whitespace => HashSet::from([' ', '\n', '\t', '\r']),
+            Self::Whitespace => HashSet::from([' ', '\n', '\t', '\r', '\0']),
         }
     }
     pub fn combine(atoms: &[Atoms]) -> HashSet<char> {
@@ -318,14 +307,20 @@ impl Atoms {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Token {
-    pub kind: TokenType,
+    pub kind: TokenKind,
     pub text: &'static str,
     pub pos: (usize, usize),
     pub end_pos: (usize, usize),
+    pub range: (usize, usize),
 }
-
+impl Eq for Token {}
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.text)
@@ -333,119 +328,100 @@ impl fmt::Display for Token {
 }
 
 impl Token {
-    pub fn new(
-        kind: TokenType,
+    pub fn placeholder(kind: TokenKind) -> Self {
+        Self {
+            kind,
+            text: kind.to_str(),
+            pos: (0, 0),
+            end_pos: (0, 0),
+            range: (0, 0),
+        }
+    }
+    pub fn from(
         text: &'static str,
         pos: (usize, usize),
         end_pos: (usize, usize),
+        range: (usize, usize),
     ) -> Self {
-        Self {
-            kind,
-            text,
-            pos,
-            end_pos,
-        }
-    }
-    pub fn from(text: &'static str, pos: (usize, usize), end_pos: (usize, usize)) -> Self {
         let kind = match text {
-            "chan" => TokenType::Chan,
-            "kun" => TokenType::Kun,
-            "senpai" => TokenType::Senpai,
-            "kouhai" => TokenType::Kouhai,
-            "san" => TokenType::San,
-            "sama" => TokenType::Sama,
-            "dono" => TokenType::Dono,
-            "+" => TokenType::Plus,
-            "-" => TokenType::Dash,
-            "*" => TokenType::Multiply,
-            "/" => TokenType::Divide,
-            "%" => TokenType::Modulo,
-            "^" => TokenType::Exponent,
-            "+=" => TokenType::PlusEqual,
-            "-=" => TokenType::DashEqual,
-            "*=" => TokenType::MultiplyEqual,
-            "/=" => TokenType::DivideEqual,
-            "%=" => TokenType::ModuloEqual,
-            "^=" => TokenType::ExponentEqual,
-            "<" => TokenType::LessThan,
-            ">" => TokenType::GreaterThan,
-            "<=" => TokenType::LessEqual,
-            ">=" => TokenType::GreaterEqual,
-            "and" => TokenType::And,
-            "or" => TokenType::Or,
-            "not" => TokenType::Not,
-            "==" => TokenType::Equal,
-            "!=" => TokenType::NotEqual,
-            "=" => TokenType::Assign,
-            "(" => TokenType::LParen,
-            ")" => TokenType::RParen,
-            "[" => TokenType::LBracket,
-            "]" => TokenType::RBracket,
-            "{" => TokenType::LBrace,
-            "}" => TokenType::RBrace,
-            "." => TokenType::Dot,
-            "?" => TokenType::Question,
-            "!" => TokenType::Bang,
-            "," => TokenType::Comma,
-            "|" => TokenType::Pipe,
-            "~" => TokenType::Terminator,
-            " " => TokenType::Whitespace,
-            "\t" => TokenType::Tab,
-            "\r" => TokenType::Return,
-            "\n" => TokenType::Newline,
-            "hi" => TokenType::Hi,
-            "main" => TokenType::Main,
-            "fun" => TokenType::Fun,
-            "gwoup" => TokenType::Group,
-            "contwact" => TokenType::Contract,
-            "wetuwn" => TokenType::Wetuwn,
-            "in" => TokenType::In,
-            "assewt" => TokenType::Assewt,
-            "uwu" => TokenType::Uwu,
-            "pwint" => TokenType::Pwint,
-            "inpwt" => TokenType::Inpwt,
-            "iwf" => TokenType::Iwf,
-            "ewse" => TokenType::Ewse,
-            "ewif" => TokenType::Ewif,
-            "mash" => TokenType::Mash,
-            "default" => TokenType::Default,
-            "fow" => TokenType::Fow,
-            "continue" => TokenType::Continue,
-            "bweak" => TokenType::Bweak,
-            "fax" => TokenType::Fax,
-            "cap" => TokenType::Cap,
-            "nuww" => TokenType::Nuww,
-            _ if text.chars().nth(0) == Some('"') => match text.chars().last() {
-                Some('"') => TokenType::StringLiteral,
-                Some('{') => TokenType::StringPartStart,
-                _ => unreachable!(),
-            },
-            _ if text.chars().nth(0) == Some('}') => match text.chars().last() {
-                Some('"') => TokenType::StringPartEnd,
-                Some('{') => TokenType::StringPartMid,
-                _ => unreachable!(),
-            },
-            _ if text.starts_with(|c: char| c.is_alphabetic() && c.is_lowercase()) => {
-                TokenType::Identifier
+            "chan" => TokenKind::Chan,
+            "kun" => TokenKind::Kun,
+            "senpai" => TokenKind::Senpai,
+            "kouhai" => TokenKind::Kouhai,
+            "san" => TokenKind::San,
+            "sama" => TokenKind::Sama,
+            "dono" => TokenKind::Dono,
+            "+" => TokenKind::Plus,
+            "-" => TokenKind::Dash,
+            "*" => TokenKind::Multiply,
+            "/" => TokenKind::Divide,
+            "%" => TokenKind::Modulo,
+            "^" => TokenKind::Exponent,
+            "+=" => TokenKind::PlusEqual,
+            "-=" => TokenKind::DashEqual,
+            "*=" => TokenKind::MultiplyEqual,
+            "/=" => TokenKind::DivideEqual,
+            "%=" => TokenKind::ModuloEqual,
+            "^=" => TokenKind::ExponentEqual,
+            "<" => TokenKind::LessThan,
+            ">" => TokenKind::GreaterThan,
+            "<=" => TokenKind::LessEqual,
+            ">=" => TokenKind::GreaterEqual,
+            "and" => TokenKind::And,
+            "or" => TokenKind::Or,
+            "not" => TokenKind::Not,
+            "==" => TokenKind::Equal,
+            "!=" => TokenKind::NotEqual,
+            "=" => TokenKind::Assign,
+            "(" => TokenKind::LParen,
+            ")" => TokenKind::RParen,
+            "[" => TokenKind::LBracket,
+            "]" => TokenKind::RBracket,
+            "{" => TokenKind::LBrace,
+            "}" => TokenKind::RBrace,
+            "." => TokenKind::Dot,
+            "?" => TokenKind::Question,
+            "!" => TokenKind::Bang,
+            "..." => TokenKind::Ellipsis,
+            "," => TokenKind::Comma,
+            ":" => TokenKind::Colon,
+            "#" => TokenKind::Hash,
+            "|" => TokenKind::Pipe,
+            "~" => TokenKind::Terminator,
+            " " => TokenKind::Whitespace,
+            "\t" => TokenKind::Tab,
+            "\r" => TokenKind::CarriageReturn,
+            "\n" => TokenKind::Newline,
+            "hi" => TokenKind::Hi,
+            "main" => TokenKind::Main,
+            "fun" => TokenKind::Fun,
+            "gwoup" => TokenKind::Group,
+            "contwact" => TokenKind::Contract,
+            "wetuwn" => TokenKind::Wetuwn,
+            "iwf" => TokenKind::Iwf,
+            "ewse" => TokenKind::Ewse,
+            "ewif" => TokenKind::Ewif,
+            "mash" => TokenKind::Mash,
+            "default" => TokenKind::Default,
+            "assewt" => TokenKind::Assewt,
+            "fow" => TokenKind::Fow,
+            "continue" => TokenKind::Continue,
+            "bweak" => TokenKind::Bweak,
+            "in" => TokenKind::In,
+            "fax" => TokenKind::Fax,
+            "cap" => TokenKind::Cap,
+            "nuww" => TokenKind::Nuww,
+            _ if text.chars().nth(0) == Some('"') => TokenKind::StringLiteral,
+            _ if text.starts_with(|c: char| c.is_ascii_alphabetic() && c.is_lowercase()) => {
+                TokenKind::Identifier
             }
-            _ if text.starts_with(|c: char| c.is_alphanumeric() && c.is_uppercase()) => {
-                TokenType::Type
+            _ if text.starts_with(|c: char| c.is_ascii_alphabetic() && c.is_uppercase()) => {
+                TokenKind::Type
             }
-            _ if text.chars().nth(0) == Some('\'') && text.chars().last() == Some('\'') => {
-                TokenType::CharLiteral
-            }
-            _ if text.chars().all(|c| c.is_ascii_digit() || c == '_') => TokenType::IntLiteral,
-            _ if text.starts_with(|c: char| c.is_ascii_digit())
-                && text
-                    .chars()
-                    .skip(1)
-                    .all(|c| c.is_ascii_digit() || c == '.' || c == '_')
-                && text.chars().last() != Some('.')
-                && text.chars().filter(|c| *c == '.').count() == 1 =>
-            {
-                TokenType::FloatLiteral
-            }
-            _ if text.starts_with(">.<") => TokenType::SingleLineComment,
+            _ if text.chars().nth(0) == Some('\'') => TokenKind::CharLiteral,
+            _ if text.chars().all(|c| c.is_ascii_digit() || c == '_') => TokenKind::IntLiteral,
+            _ if text.starts_with(|c: char| c.is_ascii_digit()) => TokenKind::FloatLiteral,
+            _ if text.starts_with(">_<") => TokenKind::Comment,
             _ => unreachable!("Unknown token: {}", text),
         };
         Token {
@@ -453,6 +429,7 @@ impl Token {
             text: text.into(),
             pos,
             end_pos,
+            range,
         }
     }
 }
