@@ -1,4 +1,8 @@
 use crate::errors::lex_errors::CompilerError;
+use crate::errors::parse_errors::{
+    BodyType, EmptyBodyError, NoMainError, NonCallableInPipelineError,
+    ParamAfterVariadicParamError, UnexpectedTokenError,
+};
 use crate::lexer::token::{Token, TokenKind};
 use crate::parser::data_types::{DataType, MapType, SetType, VecType, Vectorable};
 use crate::parser::identifiers::*;
@@ -633,6 +637,48 @@ impl Parser {
             range: Range::new(start, end),
         })
     }
+    /// starts with valid starting token for a Value in peek
+    /// ends with final token of the Value in current
+    fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ()> {
+        self.advance(1);
+        let mut left = match self.prefix_parse_fns.get(&self.curr_tok().kind) {
+            Some(parser) => parser(self)?,
+            None => {
+                self.no_parsing_fn_error(
+                    ParsingFnType::Prefix,
+                    self.curr_tok(),
+                    self.prefix_parse_fns
+                        .clone()
+                        .into_iter()
+                        .map(|(token, _)| token)
+                        .collect::<Vec<TokenKind>>(),
+                );
+                return Err(());
+            }
+        };
+        while !self.peek_tok_is_in(&[TokenKind::EOF, TokenKind::Terminator])
+            && precedence < Precedence::of(self.peek_tok().kind)
+        {
+            self.advance(1);
+            left = match self.infix_parse_fns.get(&self.curr_tok().kind) {
+                Some(parser) => parser(self, left.clone())?,
+                None => {
+                    self.no_parsing_fn_error(
+                        ParsingFnType::Infix,
+                        self.curr_tok(),
+                        self.prefix_parse_fns
+                            .clone()
+                            .into_iter()
+                            .map(|(token, _)| token)
+                            .collect::<Vec<TokenKind>>(),
+                    );
+                    return Err(());
+                }
+            };
+        }
+        Ok(left)
+    }
+
     /*
      * STATEMENT PARSERS
      */
@@ -928,6 +974,84 @@ impl Parser {
             range: Range::new(start, end),
         })
     }
+
+    /// This parses three possible ident statements: assignments, function/method calls, pipelines
+    /// ```
+    /// aqua = 1~
+    /// aqua.arms[2] = LONG~
+    /// aqua.arms[1].punch()~
+    /// aqua.scream() | voice_crack()~
+    /// ```
+    /// starts with [TokenType::Identifier] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_ident_statement(&mut self) -> Result<Statement, ()> {
+        let id = self.parse_ident_expression()?;
+        match self.curr_tok().kind {
+            TokenKind::Identifier | TokenKind::RBracket => match self.peek_tok().kind {
+                TokenKind::Assign
+                | TokenKind::PlusEqual
+                | TokenKind::DashEqual
+                | TokenKind::MultiplyEqual
+                | TokenKind::DivideEqual
+                | TokenKind::ModuloEqual
+                | TokenKind::ExponentEqual => {
+                    let id = match id {
+                        Expression::Ident(Identifier::Token(tok)) => Assignable::Token(tok),
+                        Expression::Ident(Identifier::Indexed(idx)) => Assignable::Indexed(idx),
+                        Expression::Ident(Identifier::Access(AccessType::Field(field))) => Assignable::Access(field),
+                        _ => unreachable!(
+                            "parse_ident_statement: parse_ident_value ending in Identifier and RBracket id not return Value::{{Token, Indexed, or Access:Field}}"
+                        ),
+                    };
+                    Ok(Statement::Assignment(self.parse_assignment(id)?))
+                }
+                _ => {
+                    self.unexpected_token_error(
+                        None,
+                        None,
+                        self.peek_tok(),
+                        &TokenKind::assign_ops()
+                            .into_iter()
+                            .chain(vec![TokenKind::Pipe])
+                            .collect::<Vec<TokenKind>>()
+                    );
+                    Err(())
+                }
+            },
+            TokenKind::RParen => {
+                self.expect_peek_is(TokenKind::Terminator)?;
+                match id {
+                    Expression::Ident(Identifier::FnCall(fn_call)) => Ok(Statement::FnCall(fn_call)),
+                    Expression::Ident(Identifier::Access(AccessType::Method(method))) => Ok(Statement::Method(method)),
+                    Expression::Pipeline(pipe) => Ok(Statement::Pipeline(pipe)),
+                    _ => unreachable!("parse_ident_statement(): parse_ident_value() that returned at RParen is neither FnCall or MethodAccess"),
+                }
+            }
+            _ => unreachable!(
+                "parse_ident_statement(): parse_ident_value() did not return at RParen, Identifier, or RBracket, got {}",
+                self.curr_tok().kind
+            ),
+        }
+    }
+    /// starts with [TokenType::LParen] in current, must pass in Identifier
+    /// ends with [TokenType::RParen] in current
+    fn parse_fn_call(&mut self, id: Token) -> Result<FnCall, ()> {
+        let start = id.pos;
+        let mut args: Vec<Expression> = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            args.push(self.parse_expression(Precedence::Lowest)?);
+            self.allow_hanging_comma(TokenKind::RParen)?;
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RParen)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(FnCall {
+            id,
+            args,
+            range: Range::new(start, end),
+            signature: FnSignature::default(),
+        })
+    }
     /*
      * EXPRESSION PARSERS
      */
@@ -1101,6 +1225,206 @@ impl Parser {
             .and_then(|tok| Ok(tok.end_pos))?;
         Ok(Expression::Map(MapLiteral {
             exprs,
+            range: Range::new(start, end),
+        }))
+    }
+
+    /*
+     * IDENTIFIER EXPRESSION PARSERS
+     */
+    /// This parses every possible ident expression, ranging from just a variable to pipelines to
+    /// chained accesses
+    /// ```
+    /// aqua
+    /// aqua.age
+    /// aqua.arms[1].punch()
+    /// aqua.scream() | voice_crack()
+    /// ```
+    /// starts with [TokenType::Identifier] in current
+    /// ends with any of the ff in current:
+    /// - [TokenType::Identifier]
+    /// - [TokenType::RParen]
+    /// - [TokenType::RBracket]
+    fn parse_ident_expression(&mut self) -> Result<Expression, ()> {
+        let start = self.curr_tok().pos;
+        let first = self.parse_ident()?;
+        let mut rest: Vec<Callable> = vec![];
+        while self.peek_tok_is(TokenKind::Pipe) {
+            self.expect_peek_is(TokenKind::Pipe)?;
+            self.expect_peek_is(TokenKind::Identifier)?;
+            rest.push(self.parse_callable()?);
+        }
+        let end = self.curr_tok().end_pos;
+        match &rest.len() {
+            0 => match first {
+                Identifier::Token(res) => Ok(Expression::Ident(Identifier::Token(res))),
+                Identifier::FnCall(res) => Ok(Expression::Ident(Identifier::FnCall(res))),
+                Identifier::Indexed(res) => Ok(Expression::Ident(Identifier::Indexed(res))),
+                Identifier::Access(res) => Ok(Expression::Ident(Identifier::Access(res))),
+            },
+            _ => Ok(Expression::Pipeline(Pipeline {
+                first: Box::new(first),
+                rest,
+                range: Range::new(start, end),
+            })),
+        }
+    }
+    /// This parses a single ident like [Parser::parse_ident_value] but ensures that only callables
+    /// are parsed. If the ident parsed isn't a callable (variable, field, indexed var, etc.) This
+    /// will create an error
+    ///
+    /// # Usage
+    /// Used in parsing [Pipeline]s where only callables are expected in between pipes
+    ///
+    /// starts with [TokenType::Identifier] in current
+    /// ends with [TokenType::RParen] in current
+    fn parse_callable(&mut self) -> Result<Callable, ()> {
+        let id = self.parse_ident()?;
+        match self.curr_tok().kind {
+            TokenKind::RParen => {
+                match id {
+                    Identifier::FnCall(call) => Ok(Callable::Fn(call)),
+                    Identifier::Access(AccessType::Method(method)) => Ok(Callable::Method(method)),
+                    _ => unreachable!("parse_callable(): parse_ident() that returned at RParen is neither FnCall or MethodAccess"),
+                }
+            }
+            _ => {
+                self.error = NonCallableInPipelineError::new(
+                    self.source
+                        .lines()
+                        .skip(id.range().start.0)
+                        .take(id.range().end.0 - id.range().start.0 + 1)
+                        .collect()
+                    , id)
+                    .message();
+                Err(())
+            },
+        }
+    }
+    /// Parses single idents that may or may not have field/method accesses
+    /// ```
+    /// aqua
+    /// aqua.age
+    /// aqua.likes[10]
+    /// aqua.hands[1].fingers[3].raise()
+    /// ```
+    /// starts with [TokenType::Identifier] in current
+    /// ends with any of the ff in current:
+    /// - [TokenType::Identifier]
+    /// - [TokenType::RParen]
+    /// - [TokenType::RBracket]
+    fn parse_ident(&mut self) -> Result<Identifier, ()> {
+        let start = self.curr_tok().pos;
+        let mut accessed: Vec<Accessor> = vec![];
+        let first = self.parse_ident_accessor()?;
+        accessed.push(first.clone());
+        while self.peek_tok_is(TokenKind::Dot) {
+            self.advance(1);
+            self.expect_peek_is(TokenKind::Identifier)?;
+            accessed.push(self.parse_ident_accessor()?);
+        }
+        if accessed.len() > 1 {
+            match accessed.last().cloned().unwrap_or_default() {
+                Accessor::Token(tok) => Ok(Identifier::Access(AccessType::Field(GroupAccess {
+                    accessed,
+                    access_type: std::marker::PhantomData,
+                    range: Range::new(start, tok.end_pos),
+                }))),
+                Accessor::IndexedId(idx) => {
+                    Ok(Identifier::Access(AccessType::Field(GroupAccess {
+                        accessed,
+                        access_type: std::marker::PhantomData,
+                        range: Range::new(start, idx.range().end),
+                    })))
+                }
+                Accessor::FnCall(fn_call) => {
+                    Ok(Identifier::Access(AccessType::Method(GroupAccess {
+                        accessed,
+                        access_type: std::marker::PhantomData,
+                        range: Range::new(start, fn_call.range().end),
+                    })))
+                }
+            }
+        } else {
+            match first {
+                Accessor::Token(tok) => Ok(Identifier::Token(tok)),
+                Accessor::IndexedId(idx) => Ok(Identifier::Indexed(idx)),
+                Accessor::FnCall(fn_call) => Ok(Identifier::FnCall(fn_call)),
+            }
+        }
+    }
+    /// This parses singlular idents that can but don't access fields/methods
+    /// ```
+    /// aqua
+    /// aqua()
+    /// aqua[1]
+    /// ```
+    /// starts with [TokenType::Identifier] in current
+    /// ends with any of the ff:
+    /// - [TokenType::Identifier]
+    /// - [TokenType::RParen]
+    /// - [TokenType::RBracket]
+    fn parse_ident_accessor(&mut self) -> Result<Accessor, ()> {
+        let mut init_id: Indexable = Indexable::Token(self.curr_tok());
+        let mut id: Accessor = Accessor::Token(self.curr_tok());
+        // parse fn call
+        if self.peek_tok_is(TokenKind::LParen) {
+            self.advance(1);
+            let fn_call = self.parse_fn_call(match init_id {
+                Indexable::Token(tok) => tok,
+                _ => unreachable!(
+                    "parse_ident_accessor(): impossible for self.curr_tok() to return a non-Token"
+                ),
+            })?;
+            match self.peek_tok().kind {
+                TokenKind::LBracket => {
+                    // init_id will be used in parsing indexed ident below
+                    init_id = Indexable::FnCall(fn_call);
+                }
+                _ => {
+                    // avoid unnecessary cloning if not going to parse indexed ident
+                    id = Accessor::FnCall(fn_call);
+                }
+            }
+        }
+        // parse indexed ident
+        if self.peek_tok_is(TokenKind::LBracket) {
+            self.advance(1);
+            let start = init_id.range().start;
+            let indices: Vec<Expression> = self.parse_array_literal().and_then(|a| match a {
+                Expression::Array(a) => Ok(a.exprs),
+                _ => unreachable!(),
+            })?;
+            let end = self.curr_tok().pos;
+            id = Accessor::IndexedId(IndexedId {
+                id: init_id,
+                indices,
+                range: Range::new(start, end),
+            });
+        }
+        Ok(id)
+    }
+    /// This parses a group initializer
+    /// ```
+    /// GroupName(arg1, arg2, ...)
+    /// ```
+    /// starts with [TokenType::Type] in current
+    /// ends with [TokenType::LParen] in current
+    fn parse_group_init(&mut self) -> Result<Expression, ()> {
+        let id = self.curr_tok();
+        let start = id.pos;
+        self.expect_peek_is(TokenKind::LParen)?;
+        let mut args: Vec<Expression> = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            args.push(self.parse_expression(Precedence::Lowest)?);
+            self.allow_hanging_comma(TokenKind::RParen)?;
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RParen)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Expression::GroupInit(GroupInit {
+            id,
+            args,
             range: Range::new(start, end),
         }))
     }
