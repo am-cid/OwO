@@ -1,6 +1,7 @@
 mod cli;
 mod errors;
 mod lexer;
+mod parser;
 #[cfg(test)]
 mod tests;
 mod utils;
