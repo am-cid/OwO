@@ -509,6 +509,425 @@ impl Parser {
             range: Range::new(start, end),
         })
     }
+    /// starts with [TokenType::Hi] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_declaration(&mut self) -> Result<Statement, ()> {
+        let start = self.curr_tok().pos;
+        let id = self.expect_peek_is(TokenKind::Identifier)?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        let mutable = self
+            .peek_tok_is(TokenKind::Bang)
+            .then(|| self.advance(1))
+            .is_some();
+        let optional = self
+            .peek_tok_is(TokenKind::Question)
+            .then(|| self.advance(1))
+            .is_some();
+        self.expect_peek_is(TokenKind::Assign)?;
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        let end = self
+            .expect_peek_is(TokenKind::Terminator)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Statement::Declaration(Declaration {
+            id,
+            dtype,
+            optional,
+            mutable,
+            expr,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [DataType]'s first token in current
+    /// ends with [DataType]'s last token in current
+    /// end token may be:
+    /// - [DataType] token literal (`chan`, `kun`, `senpai`...)
+    /// - [TokenType::RBracket] (`chan[1]`, `kun[3]` ...)
+    /// - [TokenType::RBrace] (`chan{}`, `kun{senpai}` ...)
+    fn parse_data_type(&mut self, tok: Token, start: (usize, usize)) -> Result<DataType, ()> {
+        match self.peek_tok().kind {
+            TokenKind::LBracket => self.parse_vector_type(Vectorable::Token(tok), start),
+            TokenKind::LBrace => {
+                self.advance(2);
+                match self.curr_tok().kind {
+                    TokenKind::RBrace => match self.peek_tok().kind {
+                        TokenKind::LBracket => self.parse_vector_type(
+                            Vectorable::Set(SetType {
+                                tok,
+                                range: Range::new(start, self.curr_tok().end_pos),
+                            }),
+                            start,
+                        ),
+                        _ => Ok(DataType::Set(SetType {
+                            tok,
+                            range: Range::new(start, self.curr_tok().end_pos),
+                        })),
+                    },
+                    TokenKind::Type
+                    | TokenKind::Chan
+                    | TokenKind::Kun
+                    | TokenKind::Senpai
+                    | TokenKind::Kouhai
+                    | TokenKind::Sama
+                    | TokenKind::San
+                    | TokenKind::Dono => {
+                        let inner = Box::new(self.parse_data_type(self.curr_tok(), start)?);
+                        let end = self
+                            .expect_peek_is(TokenKind::RBrace)
+                            .and_then(|tok| Ok(tok.end_pos))?;
+                        let res = MapType {
+                            tok,
+                            inner,
+                            range: Range::new(start, end),
+                        };
+                        match self.peek_tok().kind {
+                            TokenKind::LBracket => {
+                                self.parse_vector_type(Vectorable::Map(res), start)
+                            }
+                            _ => Ok(DataType::Map(res)),
+                        }
+                    }
+                    _ => {
+                        self.unexpected_token_error(
+                            None,
+                            None,
+                            self.curr_tok(),
+                            &TokenKind::data_types(),
+                        );
+                        self.advance(2);
+                        return Err(());
+                    }
+                }
+            }
+            _ => Ok(DataType::Token(tok)),
+        }
+    }
+    /// starts with [TokenType::RBrace] in current and [TokenType::LBracket] in peek
+    /// ends with [TokenType::RBracket] in current
+    fn parse_vector_type(&mut self, id: Vectorable, start: (usize, usize)) -> Result<DataType, ()> {
+        self.advance(1);
+        let dim = self.expect_peek_is(TokenKind::IntLiteral)?;
+        self.expect_peek_is(TokenKind::RBracket)?;
+        Ok(DataType::Vec(VecType {
+            id,
+            dim,
+            range: Range::new(start, self.curr_tok().end_pos),
+        }))
+    }
+    /// starts with [TokenType::Identifier] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_assignment(&mut self, id: Assignable) -> Result<Assignment, ()> {
+        let start = id.range().start;
+        let assign_op = self.expect_peek_is_assign_op()?;
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        let end = self
+            .expect_peek_is(TokenKind::Terminator)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Assignment {
+            id,
+            dtype: None,
+            assign_op,
+            expr,
+            range: Range::new(start, end),
+        })
+    }
+    /*
+     * STATEMENT PARSERS
+     */
+    /// starts with [TokenType::Wetuwn] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_return(&mut self) -> Result<Statement, ()> {
+        let start = self.curr_tok().pos;
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        let end = self
+            .expect_peek_is(TokenKind::Terminator)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Statement::Return(ReturnStatement {
+            expr,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::Iwf] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_if(&mut self) -> Result<Statement, ()> {
+        let start = self.curr_tok().pos;
+        let condition = self.parse_expression(Precedence::Lowest).and_then(|expr| {
+            self.expect_peek_is(TokenKind::LBrace)?;
+            Ok(expr)
+        })?;
+        let body = self.parse_body(BodyType::If)?;
+        let elifs = match self.peek_tok().kind {
+            TokenKind::Ewif => self.parse_elifs()?,
+            _ => vec![],
+        };
+        let else_block = match self.peek_tok().kind {
+            TokenKind::Ewse => {
+                self.expect_peek_is(TokenKind::Ewse)?;
+                self.expect_peek_is(TokenKind::LBrace)?;
+                Some(self.parse_body(BodyType::If)?)
+            }
+            _ => None,
+        };
+        let end = self.curr_tok().end_pos;
+        Ok(Statement::If(IfStatement {
+            condition,
+            body,
+            elifs,
+            else_block,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::Ewif] in peek
+    /// ends with [TokenType::RBrace] in current
+    fn parse_elifs(&mut self) -> Result<Vec<ElifStatement>, ()> {
+        let mut res: Vec<ElifStatement> = vec![];
+        while self.peek_tok_is(TokenKind::Ewif) {
+            let start = self
+                .expect_peek_is(TokenKind::Ewif)
+                .and_then(|tok| Ok(tok.pos))?;
+            let condition = self.parse_expression(Precedence::Lowest).and_then(|expr| {
+                self.expect_peek_is(TokenKind::LBrace)?;
+                Ok(expr)
+            })?;
+            let body = self.parse_body(BodyType::If)?;
+            let end = self.curr_tok().end_pos;
+            res.push(ElifStatement {
+                condition,
+                body,
+                range: Range::new(start, end),
+            })
+        }
+        Ok(res)
+    }
+    /// Abstracts over [Parser::parse_for_loop] and [Parser::parse_for_each]
+    /// - for loop: `fow hi i-chan = 0~ i < n~ i+1 { ...body }`
+    /// - for each: `fow item in collection { ...body }`
+    ///
+    /// starts with [TokenType::Fow] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_for(&mut self) -> Result<Statement, ()> {
+        let start = self.curr_tok().pos;
+        match self.peek_tok().kind {
+            TokenKind::Hi => self.parse_for_loop(start),
+            TokenKind::Identifier => self.parse_for_each(start),
+            _ => Err(self.unexpected_token_error(
+                None,
+                None,
+                self.peek_tok(),
+                &[TokenKind::Hi, TokenKind::Identifier],
+            )),
+        }
+    }
+    /// starts with [TokenType::Hi] in peek
+    /// ends with [TokenType::RBrace] in current
+    fn parse_for_loop(&mut self, start: (usize, usize)) -> Result<Statement, ()> {
+        self.expect_peek_is(TokenKind::Hi)?;
+        let init = match self.parse_declaration()? {
+            Statement::Declaration(decl) => decl,
+            _ => unreachable!("for loop declaration parsing always returns declaration"),
+        };
+        let condition = self.parse_expression(Precedence::Lowest).and_then(|cond| {
+            self.expect_peek_is(TokenKind::Terminator)?;
+            Ok(cond)
+        })?;
+        let update = self
+            .parse_expression(Precedence::Lowest)
+            .and_then(|update| {
+                self.expect_peek_is(TokenKind::LBrace)?;
+                Ok(update)
+            })?;
+        let body = self.parse_body(BodyType::For)?;
+        let end = self.curr_tok().end_pos;
+        Ok(Statement::ForLoop(ForLoop {
+            init,
+            condition,
+            update,
+            body,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::Identifier] in peek
+    /// ends with [TokenType::RBrace] in current
+    fn parse_for_each(&mut self, start: (usize, usize)) -> Result<Statement, ()> {
+        let item_id = self.expect_peek_is(TokenKind::Identifier)?;
+        self.expect_peek_is(TokenKind::In)?;
+        let collection = self.parse_expression(Precedence::Lowest)?;
+        let body = self
+            .expect_peek_is(TokenKind::LBrace)
+            .and_then(|_| self.parse_body(BodyType::For))?;
+        let end = self.curr_tok().end_pos;
+        Ok(Statement::ForEach(ForEach {
+            item_id,
+            collection,
+            body,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::Bweak] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_break(&mut self) -> Result<Statement, ()> {
+        let tok = self.curr_tok();
+        self.expect_peek_is(TokenKind::Terminator)?;
+        Ok(Statement::Break(tok))
+    }
+    /// starts with [TokenType::Continue] in current
+    /// ends with [TokenType::Terminator] in current
+    fn parse_continue(&mut self) -> Result<Statement, ()> {
+        let tok = self.curr_tok();
+        self.expect_peek_is(TokenKind::Terminator)?;
+        Ok(Statement::Continue(tok))
+    }
+    /// starts with [TokenType::Mash] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_mash(&mut self) -> Result<Statement, ()> {
+        let start = self.curr_tok().pos;
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        self.expect_peek_is(TokenKind::LBrace)?;
+        // disallow empty bodies
+        if self.peek_tok_is(TokenKind::RBrace) {
+            self.empty_body_error(
+                self.body_parse_fns
+                    .clone()
+                    .into_iter()
+                    .map(|(token, _)| token)
+                    .collect::<Vec<TokenKind>>(),
+                BodyType::Mash,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().pos.0)
+                    .unwrap_or_default(),
+                self.peek_tok().pos,
+            );
+            self.advance(1);
+            return Err(());
+        }
+        let mut cases: Vec<Case> = vec![];
+        while self.peek_tok_is_type() {
+            cases.push(self.parse_case()?);
+        }
+        let default = match self.peek_tok().kind {
+            TokenKind::Default => {
+                self.advance(1);
+                self.expect_peek_is(TokenKind::Colon)?;
+                Some(self.parse_case_body()?)
+            }
+            _ => None,
+        };
+        let end = self
+            .expect_peek_is(TokenKind::RBrace)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Statement::Mash(MashStatement {
+            expr,
+            cases,
+            default,
+            range: Range { start, end },
+        }))
+    }
+    /// starts with a [DataType]'s first token in current
+    /// ends with a [DataType]'s first token in peek
+    fn parse_case(&mut self) -> Result<Case, ()> {
+        let start = self.peek_tok().pos;
+        let case_type = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, start))?;
+        let body = self
+            .expect_peek_is(TokenKind::Colon)
+            .and_then(|_| self.parse_case_body())?;
+        let end = self.curr_tok().pos;
+        Ok(Case {
+            case_type,
+            body,
+            range: Range::new(start, end),
+        })
+    }
+
+    /// starts with [TokenType::Colon] in current
+    /// ends with any of the ff:
+    /// - [DataType]'s first token in peek (another case next)
+    /// - [TokenType::Default] in peek (default case next)
+    /// - [TokenType::RBrace] in peek (end of mash statement)
+    fn parse_case_body(&mut self) -> Result<Body, ()> {
+        let mut statements: Vec<Statement> = vec![];
+        let start = self.curr_tok().pos;
+        // disallow empty bodies
+        if self.peek_tok_is_type() || self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
+        {
+            self.empty_body_error(
+                self.body_parse_fns
+                    .clone()
+                    .into_iter()
+                    .map(|(token, _)| token)
+                    .collect::<Vec<TokenKind>>(),
+                BodyType::MashCase,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().pos.0)
+                    .unwrap_or_default(),
+                self.peek_tok().pos,
+            );
+            self.advance(1);
+            return Err(());
+        }
+        while !self.peek_tok_is_type()
+            && !self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
+        {
+            self.advance(1);
+            let stmt = match self.body_parse_fns.get(&self.curr_tok().kind) {
+                Some(parser) => parser(self)?,
+                None => {
+                    self.no_parsing_fn_error(
+                        ParsingFnType::Body,
+                        self.curr_tok(),
+                        self.body_parse_fns
+                            .clone()
+                            .into_iter()
+                            .map(|(tokens, _)| tokens)
+                            .into_iter()
+                            .collect::<Vec<_>>(),
+                    );
+                    return Err(());
+                }
+            };
+            statements.push(stmt);
+        }
+        let end = match self.peek_tok().kind {
+            TokenKind::Type
+            | TokenKind::Chan
+            | TokenKind::Kun
+            | TokenKind::Senpai
+            | TokenKind::Kouhai
+            | TokenKind::San
+            | TokenKind::Sama
+            | TokenKind::Dono
+            | TokenKind::Default
+            | TokenKind::RBrace => self.curr_tok().end_pos,
+            _ => {
+                self.unexpected_token_error(
+                    None,
+                    None,
+                    self.peek_tok(),
+                    &[
+                        TokenKind::Type,
+                        TokenKind::Chan,
+                        TokenKind::Kun,
+                        TokenKind::Senpai,
+                        TokenKind::Kouhai,
+                        TokenKind::San,
+                        TokenKind::Sama,
+                        TokenKind::Dono,
+                        TokenKind::Default,
+                    ],
+                );
+                return Err(());
+            }
+        };
+        Ok(Body {
+            statements,
+            range: Range::new(start, end),
+        })
+    }
     /*
      * HELPER FUNCTIONS
      */
