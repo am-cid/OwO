@@ -148,6 +148,368 @@ impl Parser {
             .unwrap_or_default()
     }
     /*
+     * PARSING FUNCTIONS
+     */
+    pub fn parse_program(&mut self) -> Result<(), ()> {
+        // Program fields
+        let mut main: Option<Function> = None;
+        let mut functions: Vec<Function> = vec![];
+        let mut groups: Vec<Group> = vec![];
+        let mut methods: Vec<GroupMethod> = vec![];
+        let mut contracts: Vec<Contract> = vec![];
+        let mut globals: Vec<Statement> = vec![];
+        // keeping track of range
+        let start = self.curr_tok().pos;
+        let mut end = (0, 0);
+        while !self.curr_tok_is(TokenKind::EOF) {
+            match self.curr_tok().kind {
+                TokenKind::Fun => match self.peek_tok().kind {
+                    TokenKind::Main => main = Some(self.parse_function()?),
+                    TokenKind::Type => methods.push(self.parse_method()?),
+                    _ => functions.push(self.parse_function()?),
+                },
+                TokenKind::Group => groups.push(self.parse_group()?),
+                TokenKind::Contract => contracts.push(self.parse_contract()?),
+                TokenKind::Hi => globals.push(self.parse_declaration()?),
+                _ => {
+                    self.unexpected_token_error(
+                        Some("INVALID GLOBAL TOKEN"),
+                        None,
+                        self.curr_tok(),
+                        &[
+                            TokenKind::Fun,
+                            TokenKind::Group,
+                            TokenKind::Contract,
+                            TokenKind::Hi,
+                        ],
+                    );
+                    break;
+                }
+            }
+            if self.peek_tok_is(TokenKind::EOF) {
+                end = self.curr_tok().end_pos;
+            }
+            self.advance(1);
+        }
+        match main {
+            Some(main) => {
+                self.program = Program {
+                    main,
+                    functions,
+                    groups,
+                    methods,
+                    contracts,
+                    globals,
+                    range: Range::new(start, end),
+                };
+                Ok(())
+            }
+            None => {
+                self.error =
+                    NoMainError::new(self.source.lines().nth(end.0).unwrap_or_default(), end)
+                        .message();
+                Err(())
+            }
+        }
+    }
+    /// starts with [TokenType::Fun] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_function(&mut self) -> Result<Function, ()> {
+        let start = self.curr_tok().pos;
+        let id = self.expect_peek_is_in(&[TokenKind::Identifier, TokenKind::Main])?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        self.expect_peek_is(TokenKind::LParen)?;
+        let params = self.parse_params()?;
+        self.expect_peek_is(TokenKind::LBrace)?;
+        let body = self.parse_body(BodyType::Fn)?;
+        let end = self.curr_tok().end_pos;
+        Ok(Function {
+            id,
+            dtype,
+            params,
+            body,
+            range: Range::new(start, end),
+        })
+    }
+    /// starts with [TokenType::Fun] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_method(&mut self) -> Result<GroupMethod, ()> {
+        let start = self.curr_tok().pos;
+        let group = self.expect_peek_is_type()?;
+        let mutable = self
+            .peek_tok_is(TokenKind::Bang)
+            .then(|| self.advance(1))
+            .is_some();
+        let id = self.expect_peek_is(TokenKind::Identifier)?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        self.expect_peek_is(TokenKind::LParen)?;
+        let params = self.parse_params()?;
+        self.expect_peek_is(TokenKind::LBrace)?;
+        let body = self.parse_body(BodyType::Method)?;
+        let end = self.curr_tok().end_pos;
+        Ok(GroupMethod {
+            id,
+            group,
+            mutable,
+            dtype,
+            params,
+            body,
+            range: Range::new(start, end),
+        })
+    }
+    /// starts with [TokenType::Group] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_group(&mut self) -> Result<Group, ()> {
+        let start = self.curr_tok().pos;
+        let id = self.expect_peek_is(TokenKind::Type)?;
+        let mut contracts: Vec<Token> = vec![];
+        match self.peek_tok().kind {
+            TokenKind::LBracket => {
+                self.advance(1);
+                while !self.peek_tok_is(TokenKind::RBracket) {
+                    contracts.push(self.expect_peek_is(TokenKind::Type)?);
+                    self.allow_hanging_comma(TokenKind::RBracket)?;
+                }
+                self.expect_peek_is(TokenKind::RBracket)?;
+            }
+            _ => (),
+        }
+        self.expect_peek_is(TokenKind::LBrace)?;
+        // disallow empty bodies
+        if self.peek_tok_is(TokenKind::RBrace) {
+            self.empty_body_error(
+                vec![TokenKind::Identifier],
+                BodyType::Group,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().pos.0)
+                    .unwrap_or_default(),
+                self.peek_tok().pos,
+            );
+            self.advance(1);
+            return Err(());
+        }
+        let fields = self.parse_fields()?;
+        let end = self.curr_tok().end_pos;
+        Ok(Group {
+            id,
+            contracts,
+            fields,
+            range: Range::new(start, end),
+        })
+    }
+    /// starts with [TokenType::LParen] in current
+    /// ends with [TokenType::RParen] in current
+    fn parse_params(&mut self) -> Result<Vec<Param>, ()> {
+        let mut params: Vec<Param> = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            let (param, is_variadic) = self.parse_param()?;
+            params.push(param.clone());
+            self.allow_hanging_comma(TokenKind::RParen)?;
+            if is_variadic && !self.peek_tok_is(TokenKind::RParen) {
+                let actual = self.peek_tok();
+                let extra_param = self.parse_param();
+                match extra_param {
+                    Ok((extra, _)) => {
+                        self.error = ParamAfterVariadicParamError::new(
+                            self.source
+                                .lines()
+                                .nth(param.range.start.0)
+                                .unwrap_or_default(),
+                            self.source
+                                .lines()
+                                .nth(extra.range.start.0)
+                                .unwrap_or_default(),
+                            param,
+                            extra,
+                        )
+                        .message();
+                        // self.advance(2);
+                        return Err(());
+                    }
+                    Err(()) => {
+                        self.unexpected_token_error(None, None, actual, &[TokenKind::RParen]);
+                        // self.advance(2);
+                        return Err(());
+                    }
+                }
+            }
+        }
+        self.advance(1);
+        Ok(params)
+    }
+    /// starts with [TokenType::Identifier] in peek
+    /// ends with [DataType]'s last token in current
+    fn parse_param(&mut self) -> Result<(Param, bool), ()> {
+        let id = self.expect_peek_is(TokenKind::Identifier)?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        let variadic = self
+            .peek_tok_is(TokenKind::Ellipsis)
+            .then(|| self.advance(1))
+            .is_some();
+        Ok((
+            Param {
+                id,
+                dtype,
+                variadic,
+                range: Range::new(id.pos, self.curr_tok().end_pos),
+            },
+            variadic,
+        ))
+    }
+    /// difference with [Self::parse_params] is that this does not allow variadic fields
+    ///
+    /// starts with [TokenType::LBrace] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_fields(&mut self) -> Result<Vec<GroupField>, ()> {
+        let mut fields = vec![];
+        while !self.peek_tok_is(TokenKind::RBrace) {
+            let field = self.parse_field()?;
+            self.expect_peek_is(TokenKind::Terminator)?;
+            fields.push(field);
+        }
+        self.advance(1);
+        Ok(fields)
+    }
+    /// difference with [Self::parse_param] is that this does not allow variadic fields
+    ///
+    /// starts with [TokenType::Identifier] in peek
+    /// ends with [DataType]'s last token in current
+    fn parse_field(&mut self) -> Result<GroupField, ()> {
+        let id = self.expect_peek_is(TokenKind::Identifier)?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        Ok(GroupField {
+            id,
+            dtype,
+            range: Range::new(id.pos, self.curr_tok().end_pos),
+        })
+    }
+    /// starts with [TokenType::Contract] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_contract(&mut self) -> Result<Contract, ()> {
+        let start = self.curr_tok().pos;
+        let id = self.expect_peek_is(TokenKind::Type)?;
+        self.expect_peek_is(TokenKind::LBrace)?;
+        if self.peek_tok_is(TokenKind::RBrace) {
+            self.empty_body_error(
+                vec![TokenKind::Identifier],
+                BodyType::Contract,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().pos.0)
+                    .unwrap_or_default(),
+                self.peek_tok().pos,
+            );
+            return Err(());
+        }
+        let mut signatures: Vec<FnSignature> = vec![];
+        while !self.peek_tok_is(TokenKind::RBrace) {
+            signatures.push(self.parse_fn_signature()?);
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RBrace)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Contract {
+            id,
+            signatures,
+            range: Range::new(start, end),
+        })
+    }
+
+    /// starts with [TokenType::Identifier] in peek
+    /// ends with [TokenType::Terminator] in current
+    fn parse_fn_signature(&mut self) -> Result<FnSignature, ()> {
+        let (fn_id, start) = self
+            .expect_peek_is(TokenKind::Identifier)
+            .and_then(|tok| Ok((tok, tok.pos)))?;
+        self.expect_peek_is(TokenKind::Dash)?;
+        let dtype = self
+            .expect_peek_is_type()
+            .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
+        self.expect_peek_is(TokenKind::LParen)?;
+        let mut params = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            params.push(
+                self.expect_peek_is_type()
+                    .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?,
+            );
+            self.allow_hanging_comma(TokenKind::RParen)?;
+        }
+        self.expect_peek_is(TokenKind::RParen)?;
+        let end = self
+            .expect_peek_is(TokenKind::Terminator)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(FnSignature {
+            id: fn_id,
+            dtype,
+            params,
+            range: Range::new(start, end),
+        })
+    }
+    /// starts with [TokenType::LBrace] in current
+    /// ends with [TokenType::RBrace] in current
+    fn parse_body(&mut self, body_type: BodyType) -> Result<Body, ()> {
+        let mut statements: Vec<Statement> = vec![];
+        let start = self.curr_tok().pos;
+        // disallow empty bodies
+        if self.peek_tok_is(TokenKind::RBrace) {
+            self.empty_body_error(
+                self.body_parse_fns
+                    .clone()
+                    .into_iter()
+                    .map(|(token, _)| token)
+                    .collect::<Vec<TokenKind>>(),
+                body_type,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().pos.0)
+                    .unwrap_or_default(),
+                self.peek_tok().pos,
+            );
+            self.advance(1);
+            return Err(());
+        }
+        while !self.peek_tok_is(TokenKind::RBrace) {
+            self.advance(1);
+            let stmt = match self.body_parse_fns.get(&self.curr_tok().kind) {
+                Some(parser) => parser(self)?,
+                None => {
+                    self.no_parsing_fn_error(
+                        ParsingFnType::Body,
+                        self.curr_tok(),
+                        self.body_parse_fns
+                            .clone()
+                            .into_iter()
+                            .map(|(tokens, _)| tokens)
+                            .into_iter()
+                            .collect::<Vec<_>>(),
+                    );
+                    return Err(());
+                }
+            };
+            statements.push(stmt);
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RBrace)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Body {
+            statements,
+            range: Range::new(start, end),
+        })
+    }
+    /*
      * HELPER FUNCTIONS
      */
     /// maps a TokenType to a respective parsing function
