@@ -1,97 +1,19 @@
-use std::collections::HashSet;
-
-use crate::lexer::token::TokenType;
-
 pub trait CompilerError {
     fn message(&self) -> String;
 }
 
-pub struct DelimError {
-    token_type: TokenType,
-    expected: HashSet<char>,
-    actual: char,
-    line_text: &'static str,
-    pos: (usize, usize),
-}
-impl DelimError {
-    pub fn new(
-        token_type: TokenType,
-        expected: HashSet<char>,
-        actual: char,
-        line_text: &'static str,
-        pos: (usize, usize),
-    ) -> Self {
-        Self {
-            token_type,
-            expected,
-            actual,
-            line_text,
-            pos,
-        }
-    }
-}
-impl CompilerError for DelimError {
-    fn message(&self) -> String {
-        let mut msg: String = "".to_string();
-        let title = match self.token_type {
-            TokenType::Identifier => "IDENTIFIER",
-            TokenType::Type => "TYPE",
-            TokenType::IntLiteral => "INTEGER LITERAL",
-            TokenType::FloatLiteral => "FLOAT LITERAL",
-            TokenType::StringLiteral => "STRING LITERAL",
-            TokenType::StringPartStart => "STRING PART START",
-            TokenType::StringPartMid => "STRING PART MID",
-            TokenType::StringPartEnd => "STRING PART END",
-            TokenType::CharLiteral => "CHAR LITERAL",
-            _ => self.token_type.to_str(),
-        };
-        msg.push_str(format!("[UNDELIMITED {}]", title).as_str());
-        msg.push_str(format!(" at line {}, col {}\n", self.pos.0, self.pos.1).as_str());
-        msg.push_str(
-            format!(
-                "    Expected any in: {}\n",
-                self.expected
-                    .iter()
-                    .map(|&c| {
-                        match c {
-                            '\n' => "'NEWLINE'".to_string(),
-                            '\t' => "'TAB'".to_string(),
-                            '\r' => "'CARRIAGE RETURN'".to_string(),
-                            ' ' => "'SPACE'".to_string(),
-                            _ => format!("'{}'", c),
-                        }
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            )
-            .as_str(),
-        );
-        let actual = match self.actual {
-            '\n' => "NEWLINE".to_string(),
-            '\t' => "TAB".to_string(),
-            '\r' => "'CARRIAGE RETURN'".to_string(),
-            ' ' => "SPACE".to_string(),
-            _ => format!("{}", self.actual),
-        };
-        msg.push_str(format!("    Got: '{}'\n", actual).as_str());
-        let line_length = self.line_text.len();
-        let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.pos.1) + "^";
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
-        msg.push_str(format!("    | {}\n", highlight).as_str());
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg
-    }
-}
-
 pub struct UnknownTokenError {
+    token: char,
     line_text: &'static str,
     pos: (usize, usize),
 }
 impl UnknownTokenError {
-    pub fn new(line_text: &'static str, pos: (usize, usize)) -> Self {
-        Self { line_text, pos }
+    pub fn new(token: char, line_text: &'static str, pos: (usize, usize)) -> Self {
+        Self {
+            token,
+            line_text,
+            pos: (pos.0 + 1, pos.1 + 1),
+        }
     }
 }
 impl CompilerError for UnknownTokenError {
@@ -99,14 +21,14 @@ impl CompilerError for UnknownTokenError {
         let mut msg: String = "".to_string();
         msg.push_str(
             format!(
-                "[UNKNOWN TOKEN] at line {}, col {}\n",
-                self.pos.0, self.pos.1
+                "[UNKNOWN TOKEN '{}'] at line {}, col {}\n",
+                self.token, self.pos.0, self.pos.1
             )
             .as_str(),
         );
         let line_length = self.line_text.len();
         let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.pos.1) + "^";
+        let highlight = " ".repeat(self.pos.1 - 1) + "^";
         msg.push_str(format!("------{}\n", border).as_str());
         msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
         msg.push_str(format!("    | {}\n", highlight).as_str());
@@ -131,7 +53,7 @@ impl UnclosedStringError {
         Self {
             actual,
             line_text,
-            start_pos,
+            start_pos: (start_pos.0 + 1, start_pos.1 + 1),
             length: length + 1,
         }
     }
@@ -151,8 +73,8 @@ impl CompilerError for UnclosedStringError {
             format!(
                 "    Got: '{}'\n",
                 match self.actual {
-                    '\n' => "NEWLINE",
-                    '\r' => "CARRIAGE RETURN",
+                    '\n' => "NEWLINE".to_string(),
+                    '\r' => "CARRIAGE RETURN".to_string(),
                     _ => unreachable!(),
                 }
             )
@@ -160,7 +82,7 @@ impl CompilerError for UnclosedStringError {
         );
         let line_length = self.line_text.len();
         let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.start_pos.1) + &"^".repeat(self.length);
+        let highlight = " ".repeat(self.start_pos.1 - 1) + &"^".repeat(self.length);
         msg.push_str(format!("------{}\n", border).as_str());
         msg.push_str(
             format!(
@@ -177,16 +99,21 @@ impl CompilerError for UnclosedStringError {
     }
 }
 
-pub struct SingleBracketError {
+pub struct UnescapedBracketInStringError {
+    actual: char,
     line_text: &'static str,
     pos: (usize, usize),
 }
-impl SingleBracketError {
-    pub fn new(line_text: &'static str, pos: (usize, usize)) -> Self {
-        Self { line_text, pos }
+impl UnescapedBracketInStringError {
+    pub fn new(actual: char, line_text: &'static str, pos: (usize, usize)) -> Self {
+        Self {
+            actual,
+            line_text,
+            pos: (pos.0 + 1, pos.1 + 1),
+        }
     }
 }
-impl CompilerError for SingleBracketError {
+impl CompilerError for UnescapedBracketInStringError {
     fn message(&self) -> String {
         let mut msg: String = "".to_string();
         msg.push_str(
@@ -197,10 +124,10 @@ impl CompilerError for SingleBracketError {
             .as_str(),
         );
         msg.push_str("    Brackets in strings are escaped like: '{{' or '}}'\n");
-        msg.push_str("    Got: '}'\n");
+        msg.push_str(format!("    Got: '{}'\n", self.actual).as_str());
         let line_length = self.line_text.len();
         let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.pos.1) + "^";
+        let highlight = " ".repeat(self.pos.1 - 1) + "^";
         msg.push_str(format!("------{}\n", border).as_str());
         msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
         msg.push_str(format!("    | {}\n", highlight).as_str());
@@ -219,7 +146,7 @@ impl UnclosedCharError {
         Self {
             actual,
             line_text,
-            start_pos,
+            start_pos: (start_pos.0 + 1, start_pos.1 + 1),
         }
     }
 }
