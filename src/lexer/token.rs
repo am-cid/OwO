@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TokenKind {
@@ -276,6 +277,38 @@ impl TokenKind {
             Self::Nuww => "nuww",
         }
     }
+    pub fn data_types() -> Vec<Self> {
+        vec![
+            Self::Chan,
+            Self::Kun,
+            Self::Senpai,
+            Self::Kouhai,
+            Self::San,
+            Self::Sama,
+            Self::Dono,
+        ]
+    }
+    pub fn assign_ops() -> Vec<Self> {
+        vec![
+            Self::Assign,
+            Self::PlusEqual,
+            Self::DashEqual,
+            Self::MultiplyEqual,
+            Self::DivideEqual,
+            Self::ModuloEqual,
+            Self::ExponentEqual,
+        ]
+    }
+    pub fn math_ops() -> Vec<Self> {
+        vec![
+            Self::Plus,
+            Self::Dash,
+            Self::Multiply,
+            Self::Divide,
+            Self::Modulo,
+            Self::Exponent,
+        ]
+    }
 }
 
 pub enum Atoms {
@@ -326,7 +359,12 @@ impl fmt::Display for Token {
         write!(f, "{}", self.text)
     }
 }
-
+impl Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kind.hash(state);
+        self.text.hash(state);
+    }
+}
 impl Token {
     pub fn placeholder(kind: TokenKind) -> Self {
         Self {
