@@ -219,6 +219,268 @@ impl CompilerError for NoMainError {
     }
 }
 
+pub struct NonCallableInPipelineError {
+    line_texts: Vec<&'static str>,
+    id: Identifier,
+    last_type: &'static str,
+}
+impl NonCallableInPipelineError {
+    pub fn new(line_texts: Vec<&'static str>, id: Identifier) -> Self {
+        Self {
+            line_texts,
+            id: id.clone(),
+            last_type: match id {
+                Identifier::Token(_) => "variable",
+                Identifier::Indexed(_) => "indexed variable",
+                Identifier::Access(access) => match access {
+                    AccessType::Field(field) => {
+                        match field.accessed.last().cloned().unwrap_or_default() {
+                            Accessor::Token(_) => "field",
+                            Accessor::IndexedId(_) => "indexed field",
+                            _ => unreachable!("NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place")
+                        }
+                    }
+                    _ => unreachable!("NonCallableInPipeError::new(): cannot be Method when the error is it isn't a callable in the first place")
+                },
+                Identifier::FnCall(_) => unreachable!(
+                    "NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place"
+                )
+            },
+        }
+    }
+}
+impl CompilerError for NonCallableInPipelineError {
+    fn message(&self) -> String {
+        let mut msg = String::new();
+        // header
+        msg.push_str(
+            format!(
+                "{} {}\n",
+                "[NON CALLABLE IN PIPELINE]".red().bold(),
+                format!(
+                    "starting at line {} column {}",
+                    self.id.range().start.0,
+                    self.id.range().start.1,
+                )
+                .bold(),
+            )
+            .as_str(),
+        );
+        msg.push_str(
+            format!(
+                "{} {}\n",
+                self.id.string(0).bold().underline(),
+                "is not callable so it's not allowed in pipeline expressions".italic()
+            )
+            .as_str(),
+        );
+        // preview
+        let side_border_empty = format!(
+            "{: >width$} |\n",
+            "",
+            width = self.id.range().start.0.to_string().len()
+        )
+        .blue();
+        msg.push_str(side_border_empty.as_str());
+        msg.push_str(
+            format!(
+                "{}\n",
+                self.line_texts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, line)| {
+                        let line_no = (self.id.range().start.0 + i).to_string();
+                        let side_border =
+                            format!("{: >width$} | ", line_no, width = line_no.len()).blue();
+                        format!(
+                            "{}{}{}",
+                            side_border,
+                            line,
+                            match (i + 1) == self.line_texts.len() {
+                                true => format!(
+                                    "\n{}{}{} {} {}",
+                                    format!("{: >width$} | ", "", width = line_no.len()).blue(),
+                                    " ".repeat(self.id.range().end.1 - self.id.string(0).len() + 1),
+                                    "^".repeat(self.id.string(0).len()).red(),
+                                    "unexpected".red(),
+                                    self.last_type.red()
+                                ),
+                                false => "".to_string(),
+                            }
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+            .as_str(),
+        );
+        msg
+    }
+}
+
+pub struct ParamAfterVariadicParamError {
+    variadic_line_text: &'static str,
+    extra_line_text: &'static str,
+    variadic: Param,
+    extra: Param,
+}
+impl ParamAfterVariadicParamError {
+    pub fn new(
+        variadic_line_text: &'static str,
+        extra_line_text: &'static str,
+        variadic: Param,
+        extra: Param,
+    ) -> Self {
+        Self {
+            variadic_line_text,
+            extra_line_text,
+            variadic,
+            extra,
+        }
+    }
+    fn preview_remove(&self, context: &str, param: &Param, line_text: String) -> String {
+        let mut msg = String::new();
+        let line_no = param.range.start.0.to_string();
+        let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
+        let side_border_empty = format!("{: >width$} | ", "", width = line_no.len()).blue();
+        msg.push_str(side_border.as_str());
+        msg.push_str(
+            format!(
+                "{}\n",
+                line_text.replace(
+                    param.string(0).as_str(),
+                    param.string(0).red().strikethrough().as_str()
+                )
+            )
+            .as_str(),
+        );
+        msg.push_str(side_border_empty.as_str());
+        msg.push_str(
+            format!(
+                "{}{} {}\n",
+                " ".repeat(param.range.start.1),
+                "^".repeat(param.range.end.1 - param.range.start.1 + 1)
+                    .red(),
+                context.red(),
+            )
+            .as_str(),
+        );
+        msg
+    }
+}
+impl CompilerError for ParamAfterVariadicParamError {
+    fn message(&self) -> String {
+        let mut msg = String::new();
+        msg.push_str(
+            format!(
+                "{} {}\n",
+                "[PARAMETER AFTER VARIADIC PARAMETER]".red(),
+                if self.extra.range.start.1 == self.extra.range.end.1 {
+                    format!(
+                        "at line {} column {}",
+                        self.extra.range.start.0, self.extra.range.end.1
+                    )
+                    .bold()
+                } else {
+                    format!(
+                        "at line {} from column {} to {}",
+                        self.extra.range.start.0, self.extra.range.start.1, self.extra.range.end.1,
+                    )
+                    .bold()
+                }
+            )
+            .as_str(),
+        );
+        msg.push_str(
+            "No other parameters should be defined after a variadic parameter\n"
+                .italic()
+                .as_str(),
+        );
+        msg.push_str(
+            format!(
+                "'{}' appeared after '{}'\n",
+                self.extra.string(0),
+                self.variadic.string(0),
+            )
+            .italic()
+            .as_str(),
+        );
+        let side_border_empty = format!(
+            "{: >width$} | ",
+            "",
+            width = self.variadic.range.start.0.to_string().len()
+        )
+        .blue();
+        msg.push_str(
+            format!(
+                "{}\n{}{}\n",
+                side_border_empty,
+                side_border_empty,
+                "try any of the following 3 suggestions:".green()
+            )
+            .as_str(),
+        );
+        // preview variadic
+        msg.push_str(
+            self.preview_remove(
+                "remove the variadic parameter",
+                &self.variadic,
+                self.variadic_line_text.replace(
+                    self.variadic.string(0).as_str(),
+                    self.variadic.string(0).red().as_str(),
+                ),
+            )
+            .as_str(),
+        );
+        // preview extra
+        msg.push_str(
+            self.preview_remove(
+                "remove the extra parameter",
+                &self.extra,
+                self.extra_line_text.replace(
+                    self.extra.string(0).as_str(),
+                    self.extra.string(0).red().as_str(),
+                ),
+            )
+            .as_str(),
+        );
+        // preview changing extra to variadic to normal param
+        let line_no = self.variadic.range.start.0.to_string();
+        let line_text = self.variadic_line_text.replace(
+            self.variadic.string(0).as_str(),
+            self.variadic.string(0).replace("...", "").green().as_str(),
+        );
+        let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
+        msg.push_str(side_border.as_str());
+        msg.push_str(
+            format!(
+                "{}\n",
+                line_text.replace(
+                    self.variadic.string(0).as_str(),
+                    self.variadic.string(0).red().as_str()
+                )
+            )
+            .as_str(),
+        );
+        msg.push_str(side_border_empty.as_str());
+        msg.push_str(
+            format!(
+                "{}{} {}\n",
+                " ".repeat(self.variadic.range.start.1),
+                "^".repeat(self.variadic.range.end.1 - self.variadic.range.start.1 - 2)
+                    .green(),
+                format!(
+                    "turn '{}' into a non variadic parameter",
+                    self.variadic.string(0)
+                )
+                .green(),
+            )
+            .as_str(),
+        );
+        msg
+    }
+}
+
 pub struct UnexpectedTokenError {
     actual: Token,
     expected: Vec<TokenKind>,
