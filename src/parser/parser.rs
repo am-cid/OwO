@@ -929,6 +929,183 @@ impl Parser {
         })
     }
     /*
+     * EXPRESSION PARSERS
+     */
+    /// starts with prefix operator in current
+    /// ends with prefix operand in current
+    fn parse_prefix_expression(&mut self) -> Result<Expression, ()> {
+        let start = self.curr_tok().pos;
+        let op = self.curr_tok();
+        let right = self.parse_expression(Precedence::Prefix)?;
+        let end = right.range().end;
+        Ok(Expression::Prefix(PrefixExpression {
+            op,
+            right: Box::new(right),
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with infix operator in current
+    /// ends with infix operand in current
+    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, ()> {
+        let start = left.range().start;
+        let op = self.curr_tok();
+        let right = self.parse_expression(Precedence::of(self.curr_tok().kind))?;
+        let end = right.range().end;
+        Ok(Expression::Infix(InfixExpression {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::LParen] in current
+    /// ends with [TokenType::RParen] in current
+    fn parse_grouped_expression(&mut self) -> Result<Expression, ()> {
+        let start = self.curr_tok().pos;
+        let expr = Box::new(self.parse_expression(Precedence::Lowest)?);
+        let end = self
+            .expect_peek_is(TokenKind::RParen)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Expression::Grouped(GroupedExpression {
+            expr,
+            range: Range::new(start, end),
+        }))
+    }
+    /*
+     * LITERAL PARSERS
+     */
+    /// just returns the current token
+    fn parse_literal(&mut self) -> Result<Expression, ()> {
+        Ok(Expression::Ident(Identifier::Token(self.curr_tok())))
+    }
+    /// starts with [TokenType::LBracket] in current
+    /// ends with [TokenType::RBracket] in current
+    fn parse_array_literal(&mut self) -> Result<Expression, ()> {
+        let start = self.curr_tok().pos;
+        let mut exprs: Vec<Expression> = vec![];
+        while !self.peek_tok_is(TokenKind::RBracket) {
+            exprs.push(self.parse_expression(Precedence::Lowest)?);
+            match self.peek_tok().kind {
+                TokenKind::Comma => {
+                    self.advance(1);
+                }
+                TokenKind::RBracket => (),
+                _ => {
+                    self.unexpected_token_error(
+                        None,
+                        None,
+                        self.peek_tok(),
+                        &[TokenKind::Comma, TokenKind::RBracket],
+                    );
+                }
+            }
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RBracket)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Expression::Array(ArrayLiteral {
+            exprs,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with Hash in current
+    /// starts with RBracket in current
+    ///
+    /// Abstracts over parsing hashset and hashmap literals depending on whether the first item is
+    /// followed by a colon or a comma
+    /// `#[item, item]` => hashset
+    /// `#[item: item]` => hashmap
+    fn parse_hash_literal(&mut self) -> Result<Expression, ()> {
+        let start = self.curr_tok().pos;
+        self.expect_peek_is(TokenKind::LBracket)?;
+        // empty literal
+        match self.peek_tok().kind {
+            // empty set: #[]
+            TokenKind::RBracket => {
+                self.advance(1);
+                return Ok(Expression::Set(SetLiteral {
+                    exprs: vec![],
+                    range: Range::new(start, self.curr_tok().end_pos),
+                }));
+            }
+            // empty map: #[:]
+            TokenKind::Colon => {
+                self.advance(1);
+                self.expect_peek_is(TokenKind::RBracket)?;
+                return Ok(Expression::Map(MapLiteral {
+                    exprs: vec![],
+                    range: Range::new(start, self.curr_tok().end_pos),
+                }));
+            }
+            _ => (),
+        }
+        let first_expr = self.parse_expression(Precedence::Lowest)?;
+        match self.peek_tok().kind {
+            TokenKind::RBracket => {
+                self.advance(1);
+                Ok(Expression::Set(SetLiteral {
+                    exprs: vec![first_expr],
+                    range: Range::new(start, self.curr_tok().end_pos),
+                }))
+            }
+            TokenKind::Comma => self.parse_set_literal(first_expr, start),
+            TokenKind::Colon => self.parse_map_literal(first_expr, start),
+            _ => {
+                self.expect_peek_is_in(&[TokenKind::Comma, TokenKind::Colon, TokenKind::RBracket])?;
+                self.advance(2);
+                Err(())
+            }
+        }
+    }
+    /// starts with [TokenType::Comma] in peek (always), with first val already parsed
+    /// ends with [TokenType::RBracket] in current
+    fn parse_set_literal(
+        &mut self,
+        first_expr: Expression,
+        start: (usize, usize),
+    ) -> Result<Expression, ()> {
+        let mut exprs: Vec<Expression> = vec![first_expr];
+        self.expect_peek_is(TokenKind::Comma)?;
+        while !self.peek_tok_is(TokenKind::RBracket) {
+            exprs.push(self.parse_expression(Precedence::Lowest)?);
+            self.allow_hanging_comma(TokenKind::RBracket)?;
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RBracket)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Expression::Set(SetLiteral {
+            exprs,
+            range: Range::new(start, end),
+        }))
+    }
+    /// starts with [TokenType::Colon] in peek (always), with first key already parsed
+    /// ends with [TokenType::RBracket] in current
+    fn parse_map_literal(
+        &mut self,
+        first_key: Expression,
+        start: (usize, usize),
+    ) -> Result<Expression, ()> {
+        self.expect_peek_is(TokenKind::Colon)?;
+        let first_expr = self.parse_expression(Precedence::Lowest)?;
+        let mut exprs: Vec<(Expression, Expression)> = vec![(first_key, first_expr)];
+        self.allow_hanging_comma(TokenKind::RBracket)?;
+        while !self.peek_tok_is(TokenKind::RBracket) {
+            let key = self.parse_expression(Precedence::Lowest)?;
+            self.expect_peek_is(TokenKind::Colon)?;
+            let expr = self.parse_expression(Precedence::Lowest)?;
+            exprs.push((key, expr));
+            self.allow_hanging_comma(TokenKind::RBracket)?;
+        }
+        let end = self
+            .expect_peek_is(TokenKind::RBracket)
+            .and_then(|tok| Ok(tok.end_pos))?;
+        Ok(Expression::Map(MapLiteral {
+            exprs,
+            range: Range::new(start, end),
+        }))
+    }
+
+    /*
      * HELPER FUNCTIONS
      */
     /// maps a TokenType to a respective parsing function
