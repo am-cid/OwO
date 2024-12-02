@@ -1,65 +1,36 @@
-use crate::errors::errors::{
-    CompilerError, DelimError, SingleBracketError, UnclosedCharError, UnclosedStringError,
+use crate::errors::lex_errors::{
+    CompilerError, UnclosedCharError, UnclosedStringError, UnescapedBracketInStringError,
     UnknownTokenError,
 };
-use crate::lexer::token::{Atoms, Token, TokenType};
-use std::collections::HashSet;
-use std::fmt;
+use crate::lexer::token::{Token, TokenKind};
 
+#[derive(Debug, Clone)]
 pub struct Lexer {
     pub source: &'static str,
     pub tokens: Vec<Token>,
     pub errors: Vec<String>,
-    pub curr_char: char,
-    pub peek_char: char,
     pub pos: usize,
     pub d_pos: (usize, usize),
 }
 
-impl fmt::Display for Lexer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "chars: ('{}','{}')\nat pos: {}(abs), ({}, {})(line, col)\n",
-            self.curr_char, self.peek_char, self.pos, self.d_pos.0, self.d_pos.1
-        )
-    }
-}
-
 impl Lexer {
     pub fn new(source: &'static str) -> Lexer {
-        let mut source_iter = source.chars();
-        let first_char = source_iter.next().expect("source is empty");
-        let second_char = source_iter.next().unwrap_or('\0');
         Lexer {
             source,
             tokens: vec![],
             errors: vec![],
-            curr_char: first_char,
-            peek_char: second_char,
             pos: 0,
             d_pos: (0, 0),
         }
     }
-    pub fn pretty_print_tokens(&self, with_whitespace: bool) -> () {
-        let width = 64;
+    pub fn pretty_print_tokens(&self) -> () {
+        let width = 69;
         println!(" {}", "-".repeat(width));
-        println!("|        kind       |         text         |       position      |");
-        println!("|-------------------|----------------------|---------------------|");
+        println!("|       kind      |       text      |     position    |    abs pos    |");
+        println!("|-----------------|-----------------|-----------------|---------------|");
         for token in &self.tokens {
-            if [
-                TokenType::Whitespace,
-                TokenType::Tab,
-                TokenType::Return,
-                TokenType::Newline,
-            ]
-            .contains(&token.kind)
-                && !with_whitespace
-            {
-                continue;
-            }
             println!(
-                "| {: ^17} | {: ^20} | ({: <2}, {: >2}) - ({: <2}, {: >2}) |",
+                "| {: <15} | {: <15} | {: <15} | {: <13} |",
                 token.kind.to_string(),
                 match token.text {
                     " " => "space".to_string(),
@@ -68,101 +39,101 @@ impl Lexer {
                     "\n" => "newline".to_string(),
                     _ => {
                         let printed = token.text.to_string();
-                        if printed.len() > 20 {
-                            printed[0..17].to_string() + "..."
+                        if printed.len() > 15 {
+                            printed[0..12].to_string() + "..."
                         } else {
                             printed
                         }
                     }
                 },
-                token.pos.0,
-                token.pos.1,
-                token.end_pos.0,
-                token.end_pos.1,
+                format!(
+                    "{: >2}:{: >2}",
+                    match &token.pos.0 == &token.end_pos.0 {
+                        true => token.pos.0.to_string(),
+                        false => format!("{}-{}", token.pos.0, token.end_pos.0),
+                    },
+                    match &token.pos.1 == &token.end_pos.1 {
+                        true => token.pos.1.to_string(),
+                        false => format!("{}-{}", token.pos.1, token.end_pos.1),
+                    }
+                ),
+                format!("{: <2}-{: >2}", token.range.0, token.range.1,),
             );
         }
         println!(" {}", "-".repeat(width));
     }
-    pub fn tokenize(&mut self) -> () {
+    pub fn tokenize(&mut self) {
         while self.pos < self.source.len() {
-            match self.curr_char {
-                ' ' => self
-                    .peek_symbol(TokenType::Whitespace)
-                    .unwrap_or_else(|_| ()),
-                '\t' => self.peek_symbol(TokenType::Tab).unwrap_or_else(|_| ()),
-                '\r' => self.peek_symbol(TokenType::Return).unwrap_or_else(|_| ()),
-                '\n' => self.peek_symbol(TokenType::Newline).unwrap_or_else(|_| ()),
+            match self.curr_char() {
+                ' ' => self.peek_symbol(TokenKind::Whitespace).ok(),
+                '\t' => self.peek_symbol(TokenKind::Tab).ok(),
+                '\r' => self.peek_symbol(TokenKind::CarriageReturn).ok(),
+                '\n' => self.peek_symbol(TokenKind::Newline).ok(),
                 '+' => self
-                    .peek_symbol(TokenType::PlusEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Plus))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::PlusEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Plus))
+                    .ok(),
                 '-' => self
-                    .peek_symbol(TokenType::DashEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Dash))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::DashEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Dash))
+                    .ok(),
                 '*' => self
-                    .peek_symbol(TokenType::MultiplyEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Multiply))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::MultiplyEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Multiply))
+                    .ok(),
                 '/' => self
-                    .peek_symbol(TokenType::DivideEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Divide))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::DivideEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Divide))
+                    .ok(),
                 '%' => self
-                    .peek_symbol(TokenType::ModuloEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Modulo))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::ModuloEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Modulo))
+                    .ok(),
                 '^' => self
-                    .peek_symbol(TokenType::ExponentEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Exponent))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::ExponentEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Exponent))
+                    .ok(),
                 '<' => self
-                    .peek_symbol(TokenType::LessEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::LessThan))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::LessEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::LessThan))
+                    .ok(),
                 '>' => self
-                    .peek_single_line_comment()
-                    .or_else(|_| self.peek_symbol(TokenType::GreaterEqual))
-                    .or_else(|_| self.peek_symbol(TokenType::GreaterThan))
-                    .unwrap_or_else(|_| ()),
+                    .peek_comment()
+                    .or_else(|_| self.peek_symbol(TokenKind::GreaterEqual))
+                    .or_else(|_| self.peek_symbol(TokenKind::GreaterThan))
+                    .ok(),
                 '=' => self
-                    .peek_symbol(TokenType::Equal)
-                    .or_else(|_| self.peek_symbol(TokenType::Assign))
-                    .unwrap_or_else(|_| ()),
+                    .peek_symbol(TokenKind::Equal)
+                    .or_else(|_| self.peek_symbol(TokenKind::Assign))
+                    .ok(),
                 '!' => self
-                    .peek_symbol(TokenType::NotEqual)
-                    .or_else(|_| self.peek_symbol(TokenType::Bang))
-                    .unwrap_or_else(|_| ()),
-                '(' => self.peek_symbol(TokenType::LParen).unwrap_or_else(|_| ()),
-                ')' => self.peek_symbol(TokenType::RParen).unwrap_or_else(|_| ()),
-                '[' => self.peek_symbol(TokenType::LBracket).unwrap_or_else(|_| ()),
-                ']' => self.peek_symbol(TokenType::RBracket).unwrap_or_else(|_| ()),
-                '{' => self.peek_symbol(TokenType::LBrace).unwrap_or_else(|_| ()),
-                '}' => self
-                    .peek_string()
-                    .or_else(|_| self.peek_symbol(TokenType::RBrace))
-                    .unwrap_or_else(|_| ()),
-                '.' => self.peek_symbol(TokenType::Dot).unwrap_or_else(|_| ()),
-                '?' => self.peek_symbol(TokenType::Question).unwrap_or_else(|_| ()),
-                ',' => self.peek_symbol(TokenType::Comma).unwrap_or_else(|_| ()),
-                '|' => self.peek_symbol(TokenType::Pipe).unwrap_or_else(|_| ()),
-                '~' => self
-                    .peek_symbol(TokenType::Terminator)
-                    .unwrap_or_else(|_| ()),
-                'a'..='z' | 'A'..='Z' => self.peek_ident(),
-                '0'..='9' => self.peek_int(),
-                '"' => self.peek_string().unwrap_or_else(|_| ()),
-                '\'' => self.peek_char_lit().unwrap_or_else(|_| ()),
-                _ => {
-                    self.errors.push(
-                        UnknownTokenError::new(
-                            self.source.lines().nth(self.d_pos.0).unwrap(),
-                            self.d_pos,
-                        )
-                        .message(),
-                    );
-                    self.advance(1);
-                }
+                    .peek_symbol(TokenKind::NotEqual)
+                    .or_else(|_| self.peek_symbol(TokenKind::Bang))
+                    .ok(),
+                '(' => self.peek_symbol(TokenKind::LParen).ok(),
+                ')' => self.peek_symbol(TokenKind::RParen).ok(),
+                '[' => self.peek_symbol(TokenKind::LBracket).ok(),
+                ']' => self.peek_symbol(TokenKind::RBracket).ok(),
+                '{' => self.peek_symbol(TokenKind::LBrace).ok(),
+                '}' => self.peek_symbol(TokenKind::RBrace).ok(),
+                '.' => self
+                    .peek_symbol(TokenKind::Ellipsis)
+                    .or_else(|_| self.peek_symbol(TokenKind::Dot))
+                    .ok(),
+                '?' => self.peek_symbol(TokenKind::Question).ok(),
+                ',' => self.peek_symbol(TokenKind::Comma).ok(),
+                ':' => self.peek_symbol(TokenKind::Colon).ok(),
+                '#' => self.peek_symbol(TokenKind::Hash).ok(),
+                '|' => self.peek_symbol(TokenKind::Pipe).ok(),
+                '~' => self.peek_symbol(TokenKind::Terminator).ok(),
+                'a'..='z' | 'A'..='Z' => Some(self.peek_ident()),
+                '0'..='9' => Some(self.peek_int()),
+                '"' => self.peek_string().ok(),
+                '\'' => self.peek_char_lit().ok(),
+                _ => Some(self.unknown_token_error()),
+            };
+        }
+    }
             }
         }
     }
