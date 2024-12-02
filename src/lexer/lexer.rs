@@ -134,55 +134,45 @@ impl Lexer {
             };
         }
     }
-            }
-        }
-    }
+
     // CURSOR MOVEMENT
     fn advance(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos > self.source.len() - 1 {
-                self.curr_char = '\0';
                 return;
             }
-            self.pos += 1;
             self.d_pos.1 += 1;
-            if self.curr_char == '\n' {
+            if self.curr_char() == '\n' {
                 self.d_pos.1 = 0;
                 self.d_pos.0 += 1;
             }
-            self.curr_char = self.peek_char;
-            self.peek_char = self.source.chars().nth(self.pos + 1).unwrap_or('\n');
+            self.pos += 1;
         }
     }
     fn reverse(&mut self, times: usize) -> () {
         for _ in 0..times {
             if self.pos == 0 {
                 self.d_pos.1 = 0;
-                self.curr_char = self.source.chars().nth(0).unwrap_or('\0');
                 return;
             }
             self.pos -= 1;
-            self.d_pos.1 = match self.d_pos.1 {
-                0 => 0,
-                _ => self.d_pos.1 - 1,
-            };
-            if self.curr_char == '\n' {
+            if self.curr_char() == '\n' {
                 self.d_pos.0 = match self.d_pos.0 {
                     0 => 0,
                     _ => self.d_pos.0 - 1,
                 };
-                self.d_pos.1 = self.source.lines().nth(self.d_pos.1).unwrap_or("").len() - 1;
+                self.d_pos.1 = self.source.lines().nth(self.d_pos.0).unwrap_or("").len() - 1;
+            } else {
+                self.d_pos.1 -= 1;
             }
-            self.peek_char = self.curr_char;
-            self.curr_char = self.source.chars().nth(self.pos).unwrap_or('\n')
         }
     }
     // TOKENIZERS
-    fn peek_symbol(&mut self, expected: TokenType) -> Result<(), ()> {
+    fn peek_symbol(&mut self, expected: TokenKind) -> Result<(), ()> {
         let expect_str = expected.to_str();
         let (line, start, end) = (self.d_pos.0, self.d_pos.1, self.d_pos.1);
         for i in 0..expect_str.len() {
-            if self.curr_char != expect_str.chars().nth(i).unwrap_or('\n') {
+            if self.curr_char() != expect_str.chars().nth(i).unwrap_or('\0') {
                 self.reverse(i);
                 return Err(());
             }
@@ -190,84 +180,65 @@ impl Lexer {
         }
         let end = match expect_str {
             "\r" | "\n" | "\t" | " " => end,
-            _ => self.d_pos.1 - 1,
+            _ => match self.d_pos.1 {
+                0 => self.d_pos.1,
+                _ => self.d_pos.1 - 1,
+            },
         };
-        self.tokens
-            .push(Token::from(expect_str, (line, start), (line, end)));
+        self.tokens.push(Token::from(
+            expect_str,
+            (line, start),
+            (line, end),
+            (self.pos - expect_str.len(), self.pos - 1),
+        ));
         Ok(())
     }
     fn peek_ident(&mut self) -> () {
         let mut tmp = String::new();
         while self.curr_char_can_be_ident() {
-            tmp.push(self.curr_char);
+            tmp.push(self.curr_char());
             self.advance(1);
         }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
     }
-    fn peek_single_line_comment(&mut self) -> Result<(), ()> {
-        let mut tmp = ">.".to_string();
-        self.expect_peek_char_is('.', 0)?;
+    fn peek_comment(&mut self) -> Result<(), ()> {
+        let mut tmp = ">_".to_string();
+        self.expect_peek_char_is('_', 0)?;
         self.expect_peek_char_is('<', 1)?;
-        while !['\n', '\r'].contains(&self.curr_char) {
-            tmp.push(self.curr_char);
+        while !['\n', '\r', '\0'].contains(&self.curr_char()) {
+            tmp.push(self.curr_char());
             self.advance(1);
         }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
         Ok(())
     }
     fn peek_int(&mut self) -> () {
         let mut tmp: String = String::new();
-        let delims = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]);
-        while self.curr_char.is_ascii_digit() || self.curr_char == '_' {
-            tmp.push(self.curr_char);
+        while self.curr_char_can_be_digit() {
+            tmp.push(self.curr_char());
             self.advance(1);
         }
-        // ended with _
-        if tmp.chars().last().unwrap_or_default() == '_' {
-            self.reverse(1);
-            self.errors.push(
-                DelimError::new(
-                    TokenType::IntLiteral,
-                    delims,
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            return;
-        }
-        if self.curr_char == '.' {
+        if self.curr_char() == '.' {
             return self.peek_float(tmp);
         }
-        if !delims.contains(&self.curr_char) {
-            self.errors.push(
-                DelimError::new(
-                    TokenType::IntLiteral,
-                    delims,
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            return;
-        }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
     }
     /// must be called after peek_int since it requires the digits before the decimal point
@@ -275,181 +246,82 @@ impl Lexer {
         let mut tmp = before;
         self.advance(1); // consume the .
         tmp.push('.');
-        let delims: HashSet<char> = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace])
-            .into_iter()
-            .filter(|&x| x != '.')
-            .collect();
-        while self.curr_char.is_ascii_digit() || self.curr_char == '_' {
-            tmp.push(self.curr_char);
+        while self.curr_char_can_be_digit() {
+            tmp.push(self.curr_char());
             self.advance(1);
         }
         if ['_', '.'].contains(&tmp.chars().last().unwrap_or_default()) {
             self.reverse(1);
         }
-        if !delims.contains(&self.curr_char) {
-            self.errors.push(
-                DelimError::new(
-                    TokenType::FloatLiteral,
-                    delims,
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            return;
-        }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
     }
     fn peek_string(&mut self) -> Result<(), ()> {
-        let starting = self.curr_char; // either " or }
-        self.advance(1);
-        let mut advance_count = 1;
-        let mut tmp: String = starting.to_string();
-        while !['"', '{'].contains(&self.curr_char) {
-            // unclosed string or single bracket
-            if self.curr_char == '\r' || self.curr_char == '\n' {
-                match starting {
-                    '"' => {
-                        self.errors.push(
-                            UnclosedStringError::new(
-                                self.curr_char,
-                                self.source.lines().nth(self.d_pos.0).unwrap(),
-                                (self.d_pos.0, self.d_pos.1 - tmp.len()),
-                                tmp.len(),
-                            )
-                            .message(),
-                        );
-                        return Err(());
-                    }
-                    '}' => {
-                        self.reverse(advance_count);
-                        return Err(());
-                    }
-                    _ => unreachable!(),
-                }
+        let mut tmp: String = self.curr_char().to_string();
+        self.advance(1); // consume opening "
+        while self.curr_char() != '"' {
+            if ['\r', '\n', '\0'].contains(&self.curr_char()) {
+                self.unclosed_string_error(&tmp);
+                return Err(());
             }
-            // ensure double {{
-            while self.curr_char == '{' && self.peek_char == '{' {
-                tmp.extend("{{".chars());
-                self.advance(2);
-                advance_count += 2;
-            }
-            // ensure double }}
-            while self.curr_char == '}' {
-                if self.peek_char != '}' {
-                    self.errors.push(
-                        SingleBracketError::new(
-                            self.source.lines().nth(self.d_pos.0).unwrap(),
-                            self.d_pos,
-                        )
-                        .message(),
-                    );
-                    self.advance(1);
-                    return Err(());
-                }
-                tmp.extend("}}".chars());
-                self.advance(2);
-                advance_count += 2;
-            }
-            tmp.push(self.curr_char);
+            tmp.push(self.curr_char());
             self.advance(1);
-            advance_count += 1;
         }
-        tmp.push(self.curr_char);
-        let delims = match self.curr_char {
-            '"' => Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]),
-            '{' => Atoms::combine(&[Atoms::AlphaNum, Atoms::Symbols, Atoms::Whitespace]),
-            _ => unreachable!(),
-        };
-        let token_type = match (
-            tmp.chars().nth(0).unwrap_or('"'),
-            tmp.chars().last().unwrap_or('"'),
-        ) {
-            ('"', '"') => TokenType::StringLiteral,
-            ('"', '{') => TokenType::StringPartStart,
-            ('}', '{') => TokenType::StringPartMid,
-            ('}', '"') => TokenType::StringPartEnd,
-            _ => unreachable!(),
-        };
-        self.advance(1); // consume the closing " or {
-        if !delims.contains(&self.curr_char) {
-            self.errors.push(
-                DelimError::new(
-                    token_type,
-                    delims,
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            )
-        }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        tmp.push(self.curr_char());
+        self.advance(1); // consume the closing "
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
         Ok(())
     }
     fn peek_char_lit(&mut self) -> Result<(), ()> {
-        let mut tmp: String = self.curr_char.to_string();
+        let mut tmp: String = self.curr_char().to_string();
         self.advance(1);
-        tmp.push(self.curr_char);
-        if self.curr_char != '\'' {
+        tmp.push(self.curr_char());
+        if self.curr_char() != '\'' {
             self.advance(1);
-            match self.curr_char {
+            match self.curr_char() {
                 '\'' => {
-                    tmp.push(self.curr_char);
+                    tmp.push(self.curr_char());
                 }
                 _ => {
-                    self.errors.push(
-                        UnclosedCharError::new(
-                            self.curr_char,
-                            self.source.lines().nth(self.d_pos.0).unwrap(),
-                            self.d_pos,
-                        )
-                        .message(),
-                    );
+                    self.unclosed_char_error();
                     self.advance(1);
                     return Err(());
                 }
             }
         }
         self.advance(1);
-        let delims = Atoms::combine(&[Atoms::Symbols, Atoms::Whitespace]);
-        if !delims.contains(&self.curr_char) {
-            self.errors.push(
-                DelimError::new(
-                    TokenType::CharLiteral,
-                    delims,
-                    self.curr_char,
-                    self.source.lines().nth(self.d_pos.0).unwrap(),
-                    self.d_pos,
-                )
-                .message(),
-            );
-            self.advance(1);
-            return Err(());
-        }
-        let token: &'static str = Box::leak(tmp.into_boxed_str());
+        let token: &'static str = tmp.leak();
         self.tokens.push(Token::from(
             token,
             (self.d_pos.0, self.d_pos.1 - token.len()),
             (self.d_pos.0, self.d_pos.1 - 1),
+            (self.pos - token.len(), self.pos - 1),
         ));
         Ok(())
     }
 
+    // STATE TRACKING
+    fn curr_char(&self) -> char {
+        self.source.chars().nth(self.pos).unwrap_or('\0')
+    }
+    fn peek_char(&self) -> char {
+        self.source.chars().nth(self.pos + 1).unwrap_or('\0')
+    }
+
     // HELPER METHODS
     fn expect_peek_char_is(&mut self, expected: char, reverse_count: usize) -> Result<(), ()> {
-        match expected == self.peek_char {
+        match expected == self.peek_char() {
             true => {
                 self.advance(1);
                 Ok(())
@@ -461,6 +333,58 @@ impl Lexer {
         }
     }
     fn curr_char_can_be_ident(&self) -> bool {
-        self.curr_char.is_ascii_alphanumeric() || self.curr_char == '_'
+        self.curr_char().is_ascii_alphanumeric() || self.curr_char() == '_'
+    }
+    fn curr_char_can_be_digit(&self) -> bool {
+        self.curr_char().is_ascii_digit() || self.curr_char() == '_'
+    }
+
+    // ERROR METHODS
+    /// Unknown token should be in `self.curr_char()`.
+    /// This also advances cursor by 1 to skip over unknown token
+    fn unknown_token_error(&mut self) -> () {
+        self.errors.push(
+            UnknownTokenError::new(
+                self.curr_char(),
+                self.source.lines().nth(self.d_pos.0).unwrap(),
+                self.d_pos,
+            )
+            .message(),
+        );
+        self.advance(1)
+    }
+    /// char that should've been a closing `"` should be in `self.curr_char()`
+    fn unclosed_string_error(&mut self, unclosed_string: &str) -> () {
+        self.errors.push(
+            UnclosedStringError::new(
+                self.curr_char(),
+                self.source.lines().nth(self.d_pos.0).unwrap(),
+                (self.d_pos.0, self.d_pos.1 - unclosed_string.len()),
+                unclosed_string.len(),
+            )
+            .message(),
+        );
+    }
+    /// char that should've been a closing `'` should be in `self.curr_char()`
+    fn unclosed_char_error(&mut self) -> () {
+        self.errors.push(
+            UnclosedCharError::new(
+                self.curr_char(),
+                self.source.lines().nth(self.d_pos.0).unwrap(),
+                self.d_pos,
+            )
+            .message(),
+        );
+    }
+    /// char that should've been a bracket should be in `self.curr_char()`
+    fn unescaped_bracket_in_string_error(&mut self) -> () {
+        self.errors.push(
+            UnescapedBracketInStringError::new(
+                self.curr_char(),
+                self.source.lines().nth(self.d_pos.0).unwrap(),
+                (self.d_pos.0, self.d_pos.1),
+            )
+            .message(),
+        );
     }
 }
