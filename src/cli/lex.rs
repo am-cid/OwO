@@ -12,21 +12,18 @@ pub struct Lex {
 }
 impl Command for Lex {
     fn help_msg(verbose: bool) {
-        let mut title = "lex".to_string().pad_right(16).fill_left(2).bold();
-        if verbose {
-            title = title.underline();
-        }
+        let title = "lex".pad_right(16).fill_left(2).bold();
         println!(
             "{}{}\n{}",
-            title,
+            if verbose { title.underline() } else { title },
             "Tokenizes a selected source file.",
-            "Outputs a list of token objects.".to_string().fill_left(18),
+            "Outputs a list of token objects.".fill_left(18),
         );
         if verbose {
             println!(
                 "\n{}{}",
-                "Usage:".to_string().bold().underline().fill_left(2),
-                "owo lex path/to/source.uwu".to_string().fill_left(10),
+                "Usage:".bold().underline().fill_left(2),
+                "owo lex path/to/source.uwu".fill_left(10),
             );
         }
     }
@@ -43,21 +40,51 @@ impl Command for Lex {
     fn exec(&self) -> Result<(), String> {
         let abs_path = Path::new(&self.arg)
             .canonicalize()
-            .map_err(|_| format!("Failed to canonicalize path: '{}'", self.arg))?
-            .must_be_file()?
+            .expect("This was already validated. Something else went wrong!")
             .display()
             .to_string();
         let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
-        // read file
-        let source = Box::leak(
-            fs::read_to_string(trimmed_path)
-                .unwrap_or("".to_string())
-                .into_boxed_str(),
+        let source: &'static str = fs::read_to_string(trimmed_path).unwrap_or_default().leak();
+        println!(
+            "source:\n{}\n{}\n{}",
+            "-".repeat(
+                source
+                    .lines()
+                    .map(|l| l.chars().count())
+                    .max()
+                    .unwrap_or_default()
+            ),
+            source,
+            "-".repeat(
+                source
+                    .lines()
+                    .map(|l| l.chars().count())
+                    .max()
+                    .unwrap_or_default()
+            )
         );
         let mut l = Lexer::new(source);
         l.tokenize();
-        l.pretty_print_tokens(false);
-        l.errors.into_iter().for_each(|err| println!("{}", err));
-        Ok(())
+        l.pretty_print_tokens();
+        if l.errors.len() > 0 {
+            l.errors.into_iter().for_each(|err| println!("{}", err));
+            Err(format!("Failed to retokenize file: {}", trimmed_path))
+        } else {
+            Ok(())
+        }
+        // // TEST
+        // let mut l = Lexer::new("hi aqua-chan = 1~");
+        // l.tokenize();
+        // l.pretty_print_tokens();
+        // l = l.retokenize("anatanoteki-desu", (3, 18));
+        // l = l.retokenize(" = 2~", (19, 23));
+        // l = l.retokenize(" >_< comment!", (24, 36));
+        // l = l.retokenize("yo", (0, 1));
+        // if l.errors.len() > 0 {
+        //     l.errors.into_iter().for_each(|err| println!("{}", err));
+        //     Err(format!("Failed to retokenize file: {}", trimmed_path))
+        // } else {
+        //     Ok(())
+        // }
     }
 }

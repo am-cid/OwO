@@ -11,7 +11,7 @@ pub struct Run {
 }
 impl Command for Run {
     fn help_msg(verbose: bool) {
-        let mut title = "run".to_string().pad_right(16).fill_left(2).bold();
+        let mut title = "run".pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
@@ -19,13 +19,13 @@ impl Command for Run {
             "{}{}\n{}\n",
             title,
             "Compiles a selected source file and runs it.",
-            "Does not make an executable.".to_string().fill_left(18),
+            "Does not make an executable.".fill_left(18),
         );
         if verbose {
             println!(
                 "\n{}{}",
-                "Usage:".to_string().bold().underline().fill_left(2),
-                "owo run path/to/source.uwu".to_string().fill_left(10),
+                "Usage:".bold().underline().fill_left(2),
+                "owo run path/to/source.uwu".fill_left(10),
             );
         }
     }

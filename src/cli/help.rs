@@ -12,7 +12,7 @@ pub struct Help {
 }
 impl Command for Help {
     fn help_msg(verbose: bool) {
-        let mut title = "help".to_string().pad_right(16).fill_left(2).bold();
+        let mut title = "help".pad_right(16).fill_left(2).bold();
         if verbose {
             title = title.underline();
         }
@@ -20,15 +20,13 @@ impl Command for Help {
             "{}{}\n{}\n",
             title,
             "prints this help message or the verbose",
-            "help message for a specific command if specified"
-                .to_string()
-                .fill_left(18),
+            "help message for a specific command if specified".fill_left(18),
         );
         if verbose {
-            print!("{}", "Usage:".to_string().bold().underline().fill_left(2));
-            println!("{}", "owo help".to_string().fill_left(10));
-            println!("{}", "owo help compile".to_string().fill_left(18));
-            println!("{}", "owo help help".to_string().fill_left(18));
+            print!("{}", "Usage:".bold().underline().fill_left(2));
+            println!("{}", "owo help".fill_left(10));
+            println!("{}", "owo help compile".fill_left(18));
+            println!("{}", "owo help help".fill_left(18));
         }
     }
     fn parse(&self) -> Result<(), String> {
@@ -47,21 +45,18 @@ impl Command for Help {
             "" => {
                 println!(
                     "{}Compiler for UwU++",
-                    "OwO".to_string().pad_right(18).bold().underline()
+                    "OwO".pad_right(18).bold().underline()
                 );
-                print!(
-                    "{}",
-                    "Version:".to_string().pad_right(18).bold().underline()
-                );
+                print!("{}", "Version:".pad_right(18).bold().underline());
                 println!("{}", env!("CARGO_PKG_VERSION"));
                 println!(
                     "{}{} {} {}\n",
-                    "Usage:".to_string().pad_right(18).bold().underline(),
-                    "owo".to_string().bold(),
-                    "<optional_command>".to_string().italic(),
-                    "<optional_arg>".to_string().italic()
+                    "Usage:".pad_right(18).bold().underline(),
+                    "owo".bold(),
+                    "<optional_command>".italic(),
+                    "<optional_arg>".italic()
                 );
-                println!("{}: ", "Optional Commands".to_string().bold().underline());
+                println!("{}: ", "Optional Commands".bold().underline());
                 Self::help_msg(false);
                 Version::help_msg(false);
                 Lex::help_msg(false);
