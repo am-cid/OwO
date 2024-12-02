@@ -83,6 +83,49 @@ impl Production for Statement {
         }
     }
 }
+
+/// Expressions define computations and operations that generate values
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Expression {
+    Ident(Identifier),
+    GroupInit(GroupInit),
+    Pipeline(Pipeline),
+    Array(ArrayLiteral),
+    Set(SetLiteral),
+    Map(MapLiteral),
+    Prefix(PrefixExpression),
+    Infix(InfixExpression),
+    Grouped(GroupedExpression),
+}
+impl Production for Expression {
+    fn range(&self) -> Range {
+        match self {
+            Self::Ident(res) => res.range(),
+            Self::GroupInit(res) => res.range(),
+            Self::Pipeline(res) => res.range(),
+            Self::Array(res) => res.range(),
+            Self::Set(res) => res.range(),
+            Self::Map(res) => res.range(),
+            Self::Prefix(res) => res.range(),
+            Self::Infix(res) => res.range(),
+            Self::Grouped(res) => res.range(),
+        }
+    }
+    fn string(&self, n: usize) -> String {
+        match self {
+            Self::Ident(res) => res.string(n),
+            Self::GroupInit(res) => res.string(n),
+            Self::Pipeline(res) => res.string(n),
+            Self::Array(res) => res.string(n),
+            Self::Set(res) => res.string(n),
+            Self::Map(res) => res.string(n),
+            Self::Prefix(res) => res.string(n),
+            Self::Infix(res) => res.string(n),
+            Self::Grouped(res) => res.string(n),
+        }
+    }
+}
+
 /// Root node of the AST
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Program {
@@ -689,6 +732,129 @@ impl Production for Case {
         )
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FnCall {
+    pub id: Token,
+    pub args: Vec<Expression>,
+    pub range: Range,
+    pub signature: FnSignature,
+}
+impl Production for FnCall {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "{}({}",
+            self.id,
+            match &self
+                .args
+                .iter()
+                .map(|v| v.string(0))
+                .collect::<Vec<_>>()
+                .join("")
+                .len()
+            {
+                0..=MAX_LINE_LENGTH => {
+                    format!(
+                        "{})",
+                        self.args
+                            .iter()
+                            .map(|arg| arg.string(n))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                _ => {
+                    format!(
+                        "{}{}",
+                        format!(
+                            "\n{}",
+                            self.args
+                                .iter()
+                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                        format!("\n{}", ")".indent(n),),
+                    )
+                }
+            }
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Callable {
+    Fn(FnCall),
+    Method(GroupAccess<MethodAccess>),
+}
+impl Production for Callable {
+    fn range(&self) -> Range {
+        match self {
+            Self::Fn(call) => call.range(),
+            Self::Method(method) => method.range(),
+        }
+    }
+    fn string(&self, n: usize) -> String {
+        match self {
+            Self::Fn(call) => call.string(n),
+            Self::Method(method) => method.string(n),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GroupInit {
+    pub id: Token,
+    pub args: Vec<Expression>,
+    pub range: Range,
+}
+impl Production for GroupInit {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "{}({}",
+            self.id,
+            match &self
+                .args
+                .iter()
+                .map(|v| v.string(0))
+                .collect::<Vec<_>>()
+                .join("")
+                .len()
+            {
+                0..=MAX_LINE_LENGTH => {
+                    format!(
+                        "{})",
+                        self.args
+                            .iter()
+                            .map(|arg| arg.string(n))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                _ => {
+                    format!(
+                        "{}{}",
+                        format!(
+                            "\n{}",
+                            self.args
+                                .iter()
+                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                        format!("\n{}", ")".indent(n),),
+                    )
+                }
+            }
+        )
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Pipeline {
     pub first: Box<Identifier>,
@@ -788,3 +954,371 @@ impl Production for ReturnStatement {
     }
 }
 
+/*
+ * EXPRESSION UNITS
+ */
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct IndexedId {
+    pub id: Indexable,
+    pub indices: Vec<Expression>,
+    pub range: Range,
+}
+impl Production for IndexedId {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "{}[{}",
+            self.id.string(n),
+            match &self
+                .indices
+                .iter()
+                .map(|v| v.string(0))
+                .collect::<Vec<_>>()
+                .join("")
+                .len()
+            {
+                0..=MAX_LINE_LENGTH => format!(
+                    "{}]",
+                    self.indices
+                        .iter()
+                        .map(|idx| idx.string(n))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                ),
+                _ => {
+                    format!(
+                        "{}{}",
+                        format!(
+                            "\n{}",
+                            self.indices
+                                .iter()
+                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                        format!("\n{}", "]".indent(n),),
+                    )
+                }
+            }
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AccessType {
+    Field(GroupAccess<FieldAccess>),
+    Method(GroupAccess<MethodAccess>),
+}
+impl Production for AccessType {
+    fn range(&self) -> Range {
+        match self {
+            Self::Method(method) => method.range(),
+            Self::Field(field) => field.range(),
+        }
+    }
+    fn string(&self, n: usize) -> String {
+        match self {
+            Self::Method(method) => method.string(n),
+            Self::Field(field) => field.string(n),
+        }
+    }
+}
+
+/*
+ * COLLETION LITERALS
+ */
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ArrayLiteral {
+    pub exprs: Vec<Expression>,
+    pub range: Range,
+}
+impl Production for ArrayLiteral {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "[{}",
+            match &self
+                .exprs
+                .iter()
+                .map(|v| v.string(0))
+                .collect::<Vec<_>>()
+                .join("")
+                .len()
+            {
+                0..=MAX_LINE_LENGTH => {
+                    format!(
+                        "{}]",
+                        self.exprs
+                            .iter()
+                            .map(|expr| expr.string(n))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                _ => {
+                    format!(
+                        "{}{}",
+                        format!(
+                            "\n{}",
+                            self.exprs
+                                .iter()
+                                .map(|expr| expr.string(n + 1).indent(n + 1) + ",")
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                        format!("\n{}", "]".indent(n),),
+                    )
+                }
+            },
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SetLiteral {
+    pub exprs: Vec<Expression>,
+    pub range: Range,
+}
+impl Production for SetLiteral {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "#[{}",
+            match &self
+                .exprs
+                .iter()
+                .map(|v| v.string(0))
+                .collect::<Vec<_>>()
+                .join("")
+                .len()
+            {
+                0..=MAX_LINE_LENGTH => {
+                    format!(
+                        "{}]",
+                        self.exprs
+                            .iter()
+                            .map(|expr| expr.string(n))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                _ => {
+                    format!(
+                        "{}{}",
+                        format!(
+                            "\n{}",
+                            self.exprs
+                                .iter()
+                                .map(|expr| expr.string(n + 1).indent(n + 1) + ",")
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                        format!("\n{}", "]".indent(n),),
+                    )
+                }
+            },
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MapLiteral {
+    pub exprs: Vec<(Expression, Expression)>,
+    pub range: Range,
+}
+impl Production for MapLiteral {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        format!(
+            "#[{}",
+            if self.exprs.len() == 0 {
+                ":".to_string()
+            } else {
+                match &self
+                    .exprs
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k.string(n), v.string(n)))
+                    .collect::<Vec<_>>()
+                    .join("")
+                    .len()
+                {
+                    0..=MAX_LINE_LENGTH => {
+                        format!(
+                            "{}]",
+                            self.exprs
+                                .iter()
+                                .map(|(k, v)| format!("{}: {}", k.string(n), v.string(n)))
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        )
+                    }
+                    _ => {
+                        format!(
+                            "{}{}",
+                            format!(
+                                "\n{}",
+                                self.exprs
+                                    .iter()
+                                    .map(|(k, v)| format!(
+                                        "{}: {}",
+                                        k.string(n + 1),
+                                        v.string(n + 1)
+                                    )
+                                    .indent(n + 1)
+                                        + ",")
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
+                            ),
+                            format!("\n{}", "]".indent(n),),
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
+/*
+ * EXPRESSIONS WITH OPERATORS
+ */
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PrefixExpression {
+    pub op: Token,
+    pub right: Box<Expression>,
+    pub range: Range,
+}
+impl Production for PrefixExpression {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        match &self.op.kind {
+            TokenKind::Dash => format!("{}{}", self.op, self.right.string(n)),
+            _ => format!("{} {}", self.op, self.right.string(n)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct InfixExpression {
+    pub left: Box<Expression>,
+    pub op: Token,
+    pub right: Box<Expression>,
+    pub range: Range,
+}
+impl Production for InfixExpression {
+    fn range(&self) -> Range {
+        self.range
+    }
+    /// TODO: use better logic than this rudimentary implementation
+    /// it currenly indents way too much if combined LR exceeds [MAX_LINE_LENGTH] chars
+    fn string(&self, n: usize) -> String {
+        match self.left.string(0).len() + self.right.string(0).len() {
+            0..=MAX_LINE_LENGTH => {
+                format!(
+                    "({} {} {})",
+                    self.left.string(n),
+                    self.op,
+                    self.right.string(n)
+                )
+            }
+            _ => {
+                format!(
+                    "{}\n{} {}",
+                    self.left.string(n),
+                    self.op.string(n + 1).indent(n + 1),
+                    self.right.string(n + 1)
+                )
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GroupedExpression {
+    pub expr: Box<Expression>,
+    pub range: Range,
+}
+impl Production for GroupedExpression {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        match &self.expr.string(0).len() {
+            0..=MAX_LINE_LENGTH => {
+                format!("{}", self.expr.string(n))
+            }
+            _ => {
+                format!("\n{}\n", self.expr.string(n + 1).indent(n + 1))
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FieldAccess;
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MethodAccess;
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GroupAccess<AccessType> {
+    pub accessed: Vec<Accessor>,
+    pub access_type: std::marker::PhantomData<AccessType>,
+    pub range: Range,
+}
+impl<T> Production for GroupAccess<T> {
+    fn range(&self) -> Range {
+        self.range
+    }
+    fn string(&self, n: usize) -> String {
+        match self.accessed.len() {
+            0..=1 => unreachable!(),
+            _ => {
+                let first = self.accessed.first().unwrap();
+                let rest = self.accessed.iter().skip(1).collect::<Vec<_>>();
+                format!(
+                    "{}{}",
+                    first.string(n),
+                    match &rest
+                        .iter()
+                        .map(|v| v.string(0))
+                        .collect::<Vec<_>>()
+                        .join("")
+                        .len()
+                    {
+                        0 => "".to_string(),
+                        1..=MAX_LINE_LENGTH => format!(
+                            ".{}",
+                            rest.iter()
+                                .map(|v| v.string(0))
+                                .collect::<Vec<_>>()
+                                .join("."),
+                        ),
+                        _ => format!(
+                            "\n{}",
+                            rest.iter()
+                                .map(|v| format!(".{}", v.string(n)).indent(n))
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ),
+                    }
+                )
+            }
+        }
+    }
+}
+impl GroupAccess<MethodAccess> {
+    pub fn last(&self) -> FnCall {
+        match self.accessed.last().cloned() {
+            Some(Accessor::FnCall(call)) => call,
+            _ => unreachable!("MethodAccess always has fn call as its last during parsing"),
+        }
+    }
+}
