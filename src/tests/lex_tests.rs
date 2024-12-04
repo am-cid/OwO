@@ -212,3 +212,74 @@ fn identifiers_with_reserved_words_in_the_name() {
         );
     }
 }
+
+#[test]
+fn escaping_quotes_in_string() {
+    let tokens = vec![r#""\"""#, r#""a\"""#, r#""\\\"!\\\"""#];
+    for text in tokens {
+        let mut l = Lexer::new(text);
+        l.tokenize();
+        assert!(l.errors.len() == 0);
+        assert!(l.tokens.len() == 1);
+        assert!(
+            l.tokens.first().unwrap().kind == TokenKind::StringLiteral,
+            "Expected {}\nGot {}",
+            TokenKind::StringLiteral,
+            l.tokens.first().unwrap().kind
+        );
+        assert!(
+            l.tokens.first().unwrap().text == text,
+            "Expected {}\nGot {}",
+            text,
+            l.tokens.first().unwrap().text
+        );
+    }
+}
+
+#[test]
+fn escaped_escaper_backslash_in_string() {
+    let mut l = Lexer::new(r#""\\""""#);
+    l.tokenize();
+    assert!(l.errors.len() == 0);
+    assert!(l.tokens.len() == 2);
+    let last_tok = l.tokens.pop().unwrap();
+    let first_tok = l.tokens.pop().unwrap();
+    assert!(
+        first_tok.kind == TokenKind::StringLiteral,
+        "Expected {}\nGot {}",
+        TokenKind::StringLiteral,
+        l.tokens.first().unwrap().kind
+    );
+    assert!(
+        first_tok.text == r#""\\""#,
+        "Expected {}\nGot {}",
+        r#""\\""#,
+        first_tok.text
+    );
+    assert!(
+        last_tok.kind == TokenKind::StringLiteral,
+        "Expected {}\nGot {}",
+        TokenKind::StringLiteral,
+        last_tok.kind
+    );
+    assert!(
+        last_tok.text == r#""""#,
+        "Expected {}\nGot {}",
+        r#""""#,
+        last_tok.text
+    );
+}
+
+#[test]
+fn unclosed_string_encountering_eof() {
+    let mut l = Lexer::new(r#"""#);
+    l.tokenize();
+    assert!(l.errors.len() == 1);
+    assert!(l.tokens.len() == 0);
+    let first_err = l.errors.first().unwrap();
+    assert!(
+        first_err.starts_with("[UNCLOSED STRING]"),
+        "Expected [UNCLOSED STRING] error\nGot {}",
+        first_err,
+    );
+}
