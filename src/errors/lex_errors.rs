@@ -100,43 +100,6 @@ impl CompilerError for UnclosedStringError {
     }
 }
 
-pub struct UnescapedBracketInStringError {
-    actual: char,
-    line_text: &'static str,
-    pos: (usize, usize),
-}
-impl UnescapedBracketInStringError {
-    pub fn new(actual: char, line_text: &'static str, pos: (usize, usize)) -> Self {
-        Self {
-            actual,
-            line_text,
-            pos: (pos.0 + 1, pos.1 + 1),
-        }
-    }
-}
-impl CompilerError for UnescapedBracketInStringError {
-    fn message(&self) -> String {
-        let mut msg: String = "".to_string();
-        msg.push_str(
-            format!(
-                "[SINGLE BRACKET] at line {}, col {}\n",
-                self.pos.0, self.pos.1
-            )
-            .as_str(),
-        );
-        msg.push_str("    Brackets in strings are escaped like: '{{' or '}}'\n");
-        msg.push_str(format!("    Got: '{}'\n", self.actual).as_str());
-        let line_length = self.line_text.len();
-        let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.pos.1 - 1) + "^";
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
-        msg.push_str(format!("    | {}\n", highlight).as_str());
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg
-    }
-}
-
 pub struct UnclosedCharError {
     actual: char,
     line_text: &'static str,
