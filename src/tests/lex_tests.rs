@@ -337,7 +337,18 @@ fn escaped_escaper_backslash_in_string() {
 }
 
 #[test]
-fn unclosed_string_encountering_eof() {
+fn lexer_errors() {
+    let mut l = Lexer::new("@");
+    l.tokenize();
+    assert!(l.errors.len() == 1);
+    assert!(l.tokens.len() == 0);
+    let first_err = l.errors.first().unwrap();
+    assert!(
+        first_err.starts_with("[UNKNOWN TOKEN '@']"),
+        "Expected [UNKNOWN TOKEN '@'] error\nGot {}",
+        first_err,
+    );
+
     let mut l = Lexer::new(r#"""#);
     l.tokenize();
     assert!(l.errors.len() == 1);
@@ -346,6 +357,17 @@ fn unclosed_string_encountering_eof() {
     assert!(
         first_err.starts_with("[UNCLOSED STRING]"),
         "Expected [UNCLOSED STRING] error\nGot {}",
+        first_err,
+    );
+
+    let mut l = Lexer::new("'");
+    l.tokenize();
+    assert!(l.errors.len() == 1);
+    assert!(l.tokens.len() == 0);
+    let first_err = l.errors.first().unwrap();
+    assert!(
+        first_err.starts_with("[UNCLOSED CHARACTER]"),
+        "Expected [UNCLOSED CHARACTER] error\nGot {}",
         first_err,
     );
 }
