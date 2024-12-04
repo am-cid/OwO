@@ -188,6 +188,27 @@ fn individual_tokens_delimited_by_whitespaces() {
     }
 }
 
-// #[test]
-// fn simple_program() {
-// }
+#[test]
+fn identifiers_with_reserved_words_in_the_name() {
+    let tokens = uwu_tokens()
+        .into_iter()
+        .filter(|tok| {
+            tok.0
+                .starts_with(|ch: char| ch.is_ascii_alphabetic() && ch.is_ascii_lowercase())
+        })
+        .map(|(tok, _)| (tok.to_string() + "a").leak())
+        .collect::<Vec<_>>();
+    for text in tokens {
+        let new_source = text;
+        let mut l = Lexer::new(new_source);
+        l.tokenize();
+        assert!(l.errors.len() == 0);
+        assert!(l.tokens.len() == 1);
+        assert!(
+            l.tokens.first().unwrap().kind == TokenKind::Identifier,
+            "Expected {}\nGot {}",
+            TokenKind::Identifier,
+            l.tokens.first().unwrap().kind
+        );
+    }
+}
