@@ -72,10 +72,11 @@ impl CompilerError for UnclosedStringError {
         msg.push_str(
             format!(
                 "    Got: '{}'\n",
-                match self.actual {
-                    '\n' => "NEWLINE".to_string(),
-                    '\r' => "CARRIAGE RETURN".to_string(),
-                    _ => unreachable!(),
+                match &self.actual {
+                    '\n' => "NEWLINE",
+                    '\r' => "CARRIAGE RETURN",
+                    '\0' => "EOF",
+                    _ => unreachable!("unexpected  string terminator: {:?}", &self.actual),
                 }
             )
             .as_str(),

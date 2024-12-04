@@ -1,6 +1,5 @@
 use crate::errors::lex_errors::{
-    CompilerError, UnclosedCharError, UnclosedStringError, UnescapedBracketInStringError,
-    UnknownTokenError,
+    CompilerError, UnclosedCharError, UnclosedStringError, UnknownTokenError,
 };
 use crate::lexer::token::{Token, TokenKind};
 
@@ -265,9 +264,16 @@ impl Lexer {
         let mut tmp: String = self.curr_char().to_string();
         self.advance(1); // consume opening "
         while self.curr_char() != '"' {
-            if ['\r', '\n', '\0'].contains(&self.curr_char()) {
-                self.unclosed_string_error(&tmp);
-                return Err(());
+            match &self.curr_char() {
+                '\\' => {
+                    tmp.push(self.curr_char());
+                    self.advance(1);
+                }
+                '\r' | '\n' | '\0' => {
+                    self.unclosed_string_error(self.d_pos.1 - &tmp.len());
+                    return Err(());
+                }
+                _ => (),
             }
             tmp.push(self.curr_char());
             self.advance(1);
@@ -354,13 +360,13 @@ impl Lexer {
         self.advance(1)
     }
     /// char that should've been a closing `"` should be in `self.curr_char()`
-    fn unclosed_string_error(&mut self, unclosed_string: &str) -> () {
+    fn unclosed_string_error(&mut self, strlen: usize) -> () {
         self.errors.push(
             UnclosedStringError::new(
                 self.curr_char(),
                 self.source.lines().nth(self.d_pos.0).unwrap(),
-                (self.d_pos.0, self.d_pos.1 - unclosed_string.len()),
-                unclosed_string.len(),
+                (self.d_pos.0, strlen),
+                strlen,
             )
             .message(),
         );
@@ -372,17 +378,6 @@ impl Lexer {
                 self.curr_char(),
                 self.source.lines().nth(self.d_pos.0).unwrap(),
                 self.d_pos,
-            )
-            .message(),
-        );
-    }
-    /// char that should've been a bracket should be in `self.curr_char()`
-    fn unescaped_bracket_in_string_error(&mut self) -> () {
-        self.errors.push(
-            UnescapedBracketInStringError::new(
-                self.curr_char(),
-                self.source.lines().nth(self.d_pos.0).unwrap(),
-                (self.d_pos.0, self.d_pos.1),
             )
             .message(),
         );
