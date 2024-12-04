@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -311,35 +310,6 @@ impl TokenKind {
     }
 }
 
-pub enum Atoms {
-    AlphaNum,
-    Symbols,
-    Whitespace,
-}
-impl Atoms {
-    pub fn charset(&self) -> HashSet<char> {
-        match self {
-            Self::AlphaNum => ('a'..='z')
-                .chain('A'..='Z')
-                .chain('0'..='9')
-                .chain(HashSet::from(['_']))
-                .collect(),
-            Self::Symbols => HashSet::from([
-                '+', '-', '*', '/', '%', '^', '>', '<', '=', '|', '&', '!', '(', ')', '[', ']',
-                '{', '}', '.', '?', ',', '~', '"', ':',
-            ]),
-            Self::Whitespace => HashSet::from([' ', '\n', '\t', '\r', '\0']),
-        }
-    }
-    pub fn combine(atoms: &[Atoms]) -> HashSet<char> {
-        let mut res = HashSet::new();
-        for atom in atoms {
-            res.extend(atom.charset());
-        }
-        res
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Token {
     pub kind: TokenKind,
@@ -351,7 +321,7 @@ pub struct Token {
 impl Eq for Token {}
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
+        self.kind == other.kind && self.text == other.text
     }
 }
 impl fmt::Display for Token {
@@ -366,15 +336,6 @@ impl Hash for Token {
     }
 }
 impl Token {
-    pub fn placeholder(kind: TokenKind) -> Self {
-        Self {
-            kind,
-            text: kind.to_str(),
-            pos: (0, 0),
-            end_pos: (0, 0),
-            range: (0, 0),
-        }
-    }
     pub fn from(
         text: &'static str,
         pos: (usize, usize),
