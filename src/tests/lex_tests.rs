@@ -199,6 +199,62 @@ fn individual_tokens_delimited_by_whitespaces() {
 }
 
 #[test]
+fn tokens_delimited_by_invalid_character() {
+    let tokens = uwu_tokens();
+    let invalid_character = "@";
+    for (text, kind) in tokens.clone() {
+        let new_source = text.to_owned() + invalid_character;
+        let mut l = Lexer::new(Box::leak(new_source.clone().into_boxed_str()));
+        l.tokenize();
+        l.pretty_print_tokens();
+        assert!(
+            l.errors.len()
+                == match kind {
+                    TokenKind::Comment => 0,
+                    _ => 1,
+                },
+        );
+        assert!(l.tokens.len() == 1, "Expected 1\nGot {}", l.tokens.len(),);
+        let token = l.tokens.first().unwrap();
+        let end = (
+            0,
+            match kind {
+                TokenKind::Comment => text.len(),
+                _ => text.len() - 1,
+            },
+        );
+        let expected = Token {
+            kind,
+            text: match kind {
+                TokenKind::Comment => Box::leak(new_source.into_boxed_str()),
+                _ => text,
+            },
+            pos: (0, 0),
+            end_pos: end,
+            range: end,
+        };
+        assert!(
+            token.kind == expected.kind
+                && token.text == expected.text
+                && token.pos == expected.pos
+                && token.end_pos == expected.end_pos
+                && token.range == expected.range,
+            "Expected:\n\t{}, {}, {:?}, {:?}, {:?}\nGot:\n\t{}, {}, {:?}, {:?}, {:?}",
+            expected.kind,
+            expected.text,
+            expected.pos,
+            expected.end_pos,
+            expected.range,
+            token.kind,
+            token.text,
+            token.pos,
+            token.end_pos,
+            token.range,
+        );
+    }
+}
+
+#[test]
 fn identifiers_with_reserved_words_in_the_name() {
     let tokens = uwu_tokens()
         .into_iter()
