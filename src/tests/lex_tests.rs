@@ -89,7 +89,11 @@ fn individual_tokens() {
     for (text, kind) in tokens.clone() {
         let mut l = Lexer::new(text);
         l.tokenize();
-        assert!(l.errors.len() == 0, "{}", l.errors.join("\n"));
+        assert!(
+            l.errors.len() == 0,
+            "unexpected errors:\n{}",
+            l.errors.join("\n")
+        );
         assert!(
             l.tokens.len() == 1,
             "Expected 1 token\nGot {}\nSource: {}\nTokens: {:?}",
@@ -97,27 +101,28 @@ fn individual_tokens() {
             text,
             l.tokens,
         );
+        let token = l.tokens.first().unwrap();
         assert!(
-            l.tokens[0]
-                == Token {
-                    kind,
-                    text,
-                    pos: (0, 0),
-                    end_pos: (0, text.len() - 1),
-                    range: (0, text.len() - 1)
-                },
-            "Expected:\n\t{}, {}, {:?}, {:?}\nGot:\n\t{}, {}, {:?}, {:?}",
+            token.kind == kind
+                && token.text == text
+                && token.pos == (0, 0)
+                && token.end_pos == (0, text.len() - 1)
+                && token.range == (0, text.len() - 1),
+            "Expected:\n\t{}, {}, {:?}, {:?}, {:?}\nGot:\n\t{}, {}, {:?}, {:?}, {:?}",
             kind,
             text,
             (0, 0),
+            (0, text.len() - 1),
             (0, text.len() - 1),
             l.tokens[0].kind,
             l.tokens[0].text,
             l.tokens[0].pos,
             l.tokens[0].end_pos,
+            l.tokens[0].range,
         );
     }
 }
+
 #[test]
 fn individual_tokens_delimited_by_whitespaces() {
     let tokens = uwu_tokens();
@@ -147,42 +152,47 @@ fn individual_tokens_delimited_by_whitespaces() {
                 },
                 l.tokens.len(),
             );
-            assert!(l.tokens[0] == Token {
-                    kind,
-                    text: match kind {
-                        TokenKind::Comment => match whitespace {
-                            " " | "\t" => Box::leak(new_source.into_boxed_str()),
-                            _ => text,
-                        }
-                        _ => text,
-                    },
-                    pos: (0, 0),
-                    end_pos: (0,
-                        match kind {
-                        TokenKind::Comment => match whitespace {
-                            " " | "\t" => text.len(),
-                            _ => text.len() - 1,
-                        }
-                        _ => text.len() - 1,
-                    }),
-                    range: (0, text.len()-1),
-                },
-                "Expected:\n\tkind: '{}', text: '{}', pos: {:?}, end_pos: {:?}\nGot\n\tkind: '{}', text: '{}', pos: {:?}, end_pos: {:?}\n\nSource: {}",
-                kind,
-                text,
-                (0, 0),
-                (0, match kind {
+            let token = l.tokens.first().unwrap();
+            let end = (
+                0,
+                match kind {
                     TokenKind::Comment => match whitespace {
                         " " | "\t" => text.len(),
                         _ => text.len() - 1,
-                    }
+                    },
                     _ => text.len() - 1,
-                }),
-                l.tokens[0].kind,
-                l.tokens[0].text,
-                l.tokens[0].pos,
-                l.tokens[0].end_pos,
-                text,
+                },
+            );
+            let expected = Token {
+                kind,
+                text: match kind {
+                    TokenKind::Comment => match whitespace {
+                        " " | "\t" => Box::leak(new_source.into_boxed_str()),
+                        _ => text,
+                    },
+                    _ => text,
+                },
+                pos: (0, 0),
+                end_pos: end,
+                range: end,
+            };
+            assert!(
+                token.kind == expected.kind
+                    && token.text == expected.text
+                    && token.pos == expected.pos
+                    && token.end_pos == expected.end_pos
+                    && token.range == expected.range,
+                "Expected:\n\t{}, {}, {:?}, {:?}, {:?}\nGot:\n\t{}, {}, {:?}, {:?}, {:?}",
+                expected.kind,
+                expected.text,
+                expected.pos,
+                expected.end_pos,
+                expected.range,
+                token.kind,
+                token.text,
+                token.pos,
+                token.end_pos,
+                token.range,
             );
         }
     }
