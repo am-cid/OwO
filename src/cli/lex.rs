@@ -1,4 +1,7 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     cli::commands::Command,
@@ -7,10 +10,18 @@ use crate::{
 };
 
 pub struct Lex {
-    pub arg: String,
-    pub flags: Option<Vec<String>>,
+    arg: String,
+    path: PathBuf,
+    flags: Option<Vec<String>>,
 }
 impl Command for Lex {
+    fn new(arg: String, flags: Option<Vec<String>>) -> Self {
+        Self {
+            arg,
+            path: "".into(),
+            flags,
+        }
+    }
     fn help_msg(verbose: bool) {
         let title = "lex".pad_right(16).fill_left(2).bold();
         println!(
@@ -27,15 +38,17 @@ impl Command for Lex {
             );
         }
     }
-    fn parse(&self) -> Result<(), String> {
-        Path::new(&self.arg)
+    fn validate(&mut self) -> Result<(), String> {
+        self.path = Path::new(&self.arg)
             .canonicalize()
             .map_err(|_| format!("Failed to canonicalize path: '{}'", self.arg))?
-            .must_be_file()?
+            .must_be_file()?;
+        self.path
             .extension()
             .map_or(false, |ext| ext == "uwu")
             .then(|| ())
-            .ok_or(format!("\"{}\" is not a .uwu file", self.arg))
+            .ok_or(format!("\"{}\" is not a .uwu file", self.arg))?;
+        Ok(())
     }
     fn exec(&self) -> Result<(), String> {
         let abs_path = Path::new(&self.arg)

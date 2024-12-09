@@ -5,6 +5,9 @@ pub struct Version {
     pub flags: Option<Vec<String>>,
 }
 impl Command for Version {
+    fn new(arg: String, flags: Option<Vec<String>>) -> Self {
+        Self { arg, flags }
+    }
     fn help_msg(verbose: bool) {
         let mut title = "version".pad_right(16).fill_left(2).bold();
         if verbose {
@@ -24,7 +27,7 @@ impl Command for Version {
             );
         }
     }
-    fn parse(&self) -> Result<(), String> {
+    fn validate(&mut self) -> Result<(), String> {
         match self.arg.as_str() {
             "" => Ok(()),
             _ => Err(format!("'version' takes no arguments, got '{}'", self.arg)),

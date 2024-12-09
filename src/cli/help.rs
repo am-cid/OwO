@@ -7,10 +7,16 @@ use crate::{
 };
 
 pub struct Help {
-    pub arg: String,
-    pub flags: Option<Vec<String>>,
+    arg: String,
+    flags: Option<Vec<String>>,
 }
 impl Command for Help {
+    fn new(arg: String, flags: Option<Vec<String>>) -> Self
+    where
+        Self: Sized,
+    {
+        Self { arg, flags }
+    }
     fn help_msg(verbose: bool) {
         let mut title = "help".pad_right(16).fill_left(2).bold();
         if verbose {
@@ -29,7 +35,7 @@ impl Command for Help {
             println!("{}", "owo help help".fill_left(18));
         }
     }
-    fn parse(&self) -> Result<(), String> {
+    fn validate(&mut self) -> Result<(), String> {
         match self.arg.as_str() {
             "" | "help" | "lex" | "parse" | "analyze" | "compile" | "run" | "version" => Ok(()),
             _ => Err(format!(
