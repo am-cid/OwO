@@ -5,7 +5,10 @@ use std::{
 
 use crate::{
     cli::commands::Command,
-    lexer::{lexer::Lexer, token::TokenKind},
+    lexer::{
+        lexer::Lexer,
+        token::{Token, TokenKind},
+    },
     parser::{parser::Parser, productions::Production},
     utils::{path::PathExt, string::StringExt},
 };
@@ -58,20 +61,15 @@ impl Command for Parse {
         let abs_path = self.path.display().to_string();
         let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
         // read file
-        let source = Box::leak(
-            fs::read_to_string(trimmed_path)
-                .unwrap_or_default()
-                .into_boxed_str(),
-        );
-        let mut l = Lexer::new(source);
-        l.tokenize();
-        l.pretty_print_tokens();
+        let source = fs::read_to_string(trimmed_path).unwrap_or_default();
+        let l = Lexer::new(source);
+        l.debug_tokens();
         if l.errors.len() > 0 {
             l.errors.into_iter().for_each(|err| println!("{}", err));
             return Err(format!("Failed to tokenize file: {}", trimmed_path));
         }
         let mut p = Parser::new(
-            source,
+            &l.source,
             l.tokens
                 .into_iter()
                 .filter(|tok| match tok.kind {
@@ -83,10 +81,10 @@ impl Command for Parse {
                     | TokenKind::EOF => false,
                     _ => true,
                 })
-                .collect::<Vec<_>>(),
+                .collect::<Vec<Token>>(),
         );
         match p.parse_program() {
-            Ok(()) => Ok(println!("{}", p.program.string(0))),
+            Ok(()) => Ok(println!("{}", p.program.to_string(p.source, 0))),
             Err(()) => {
                 println!("{}", p.error);
                 Err(format!("Failed to parse file: {}", trimmed_path))

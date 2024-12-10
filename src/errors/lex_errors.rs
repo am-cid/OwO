@@ -1,159 +1,166 @@
+use std::fmt;
+
 pub trait CompilerError {
     fn message(&self) -> String;
 }
 
-pub struct UnknownTokenError {
-    token: char,
-    line_text: &'static str,
-    pos: (usize, usize),
-}
-impl UnknownTokenError {
-    pub fn new(token: char, line_text: &'static str, pos: (usize, usize)) -> Self {
-        Self {
-            token,
-            line_text,
-            pos: (pos.0 + 1, pos.1 + 1),
-        }
-    }
-}
-impl CompilerError for UnknownTokenError {
-    fn message(&self) -> String {
-        let mut msg: String = "".to_string();
-        msg.push_str(
-            format!(
-                "[UNKNOWN TOKEN '{}'] at line {}, col {}\n",
-                self.token, self.pos.0, self.pos.1
-            )
-            .as_str(),
-        );
-        let line_length = self.line_text.len();
-        let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.pos.1 - 1) + "^";
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg.push_str(format!("{:width$} | {}\n", self.pos.0, self.line_text, width = 3).as_str());
-        msg.push_str(format!("    | {}\n", highlight).as_str());
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg
-    }
-}
+/// width of the line column in error messages
+const COL_WIDTH: usize = 3;
 
-pub struct UnclosedStringError {
-    actual: char,
-    line_text: &'static str,
-    start_pos: (usize, usize),
-    length: usize,
+#[derive(Debug, Clone, Copy)]
+pub enum LexerError<'a> {
+    UnknownToken(UnknownToken<'a>),
+    UnclosedString(UnclosedString<'a>),
+    UnclosedChar(UnclosedChar<'a>),
+    EmptyChar(EmptyChar<'a>),
 }
-impl UnclosedStringError {
-    pub fn new(
-        actual: char,
-        line_text: &'static str,
-        start_pos: (usize, usize),
-        length: usize,
-    ) -> Self {
-        Self {
-            actual,
-            line_text,
-            start_pos: (start_pos.0 + 1, start_pos.1 + 1),
-            length: length + 1,
-        }
+impl<'a> fmt::Display for LexerError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::UnknownToken(res) => res.to_string(),
+                Self::UnclosedString(res) => res.to_string(),
+                Self::UnclosedChar(res) => res.to_string(),
+                Self::EmptyChar(res) => res.to_string(),
+            }
+        )
     }
 }
-impl CompilerError for UnclosedStringError {
-    fn message(&self) -> String {
-        let mut msg: String = "".to_string();
-        msg.push_str(
+#[derive(Debug, Clone, Copy)]
+pub struct UnknownToken<'a> {
+    pub token: char,
+    pub line_text: &'a str,
+    pub line: usize,
+    pub col: usize,
+}
+impl<'a> fmt::Display for UnknownToken<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
             format!(
-                "[UNCLOSED STRING] at line {}, col {}\n",
-                self.start_pos.0, self.start_pos.1
+                r#"
+[UNKNOWN TOKEN {token:?}] at line {line}, col {col}
+------{border}
+{line:COL_WIDTH$} | {line_text}
+{none:COL_WIDTH$} | {highlight}
+------{border}
+"#,
+                line = self.line + 1,
+                col = self.col + 1,
+                token = self.token,
+                border = "-".repeat(self.line_text.len()),
+                highlight = " ".repeat(self.col) + "^",
+                line_text = self.line_text,
+                none = " ",
             )
-            .as_str(),
-        );
-        msg.push_str(format!("    Expected any in: '\"', '}}'\n").as_str());
-        msg.push_str(
-            format!(
-                "    Got: '{}'\n",
-                match &self.actual {
-                    '\n' => "NEWLINE",
-                    '\r' => "CARRIAGE RETURN",
-                    '\0' => "EOF",
-                    _ => unreachable!("unexpected  string terminator: {:?}", &self.actual),
-                }
-            )
-            .as_str(),
-        );
-        let line_length = self.line_text.len();
-        let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.start_pos.1 - 1) + &"^".repeat(self.length);
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg.push_str(
-            format!(
-                "{:width$} | {}\n",
-                self.start_pos.0,
-                self.line_text,
-                width = 3
-            )
-            .as_str(),
-        );
-        msg.push_str(format!("    | {}\n", highlight).as_str());
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg
+            .trim(),
+        )
     }
 }
-
-pub struct UnclosedCharError {
-    actual: char,
-    line_text: &'static str,
-    start_pos: (usize, usize),
+#[derive(Debug, Clone, Copy)]
+pub struct UnclosedString<'a> {
+    pub actual: char,
+    pub line_text: &'a str,
+    pub line: usize,
+    pub col: usize,
+    pub length: usize,
 }
-impl UnclosedCharError {
-    pub fn new(actual: char, line_text: &'static str, start_pos: (usize, usize)) -> Self {
-        Self {
-            actual,
-            line_text,
-            start_pos: (start_pos.0 + 1, start_pos.1 + 1),
-        }
+impl<'a> fmt::Display for UnclosedString<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            format!(
+                r#"
+[UNCLOSED STRING] at line {line}, col {col_start}-{col_end}
+    Expected: '"'
+    Got: {actual:?}
+------{border}
+{line:COL_WIDTH$} | {line_text}
+{none:COL_WIDTH$} | {highlight}
+------{border}
+"#,
+                line = self.line + 1,
+                col_start = self.col + 1,
+                col_end = self.col + self.length,
+                actual = self.actual,
+                border = "-".repeat(self.line_text.len()),
+                highlight = " ".repeat(self.col) + &"^".repeat(self.length),
+                line_text = self.line_text,
+                none = " ",
+            )
+            .trim(),
+        )
     }
 }
-impl CompilerError for UnclosedCharError {
-    fn message(&self) -> String {
-        let mut msg: String = "".to_string();
-        msg.push_str(
+#[derive(Debug, Clone, Copy)]
+pub struct UnclosedChar<'a> {
+    pub actual: char,
+    pub line_text: &'a str,
+    pub line: usize,
+    pub col: usize,
+    pub length: usize,
+}
+impl<'a> fmt::Display for UnclosedChar<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
             format!(
-                "[UNCLOSED CHARACTER] at line {}, col {}\n",
-                self.start_pos.0, self.start_pos.1
+                r#"
+[UNCLOSED CHARACTER] at line {line}, col {col_start}-{col_end}
+    Expected "'"
+    Got: {actual:?}
+------{border}
+{line:COL_WIDTH$} | {line_text}
+{none:COL_WIDTH$} | {highlight}
+------{border}
+"#,
+                line = self.line + 1,
+                col_start = self.col + 1,
+                col_end = self.col + self.length,
+                actual = self.actual,
+                border = "-".repeat(self.line_text.len()),
+                highlight = " ".repeat(self.col) + &"^".repeat(self.length),
+                line_text = self.line_text,
+                none = " ",
             )
-            .as_str(),
-        );
-        msg.push_str(format!("    Expected \"'\"\n").as_str());
-        let actual = self.actual.to_string();
-        msg.push_str(
+            .trim()
+        )
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct EmptyChar<'a> {
+    pub line_text: &'a str,
+    pub line: usize,
+    pub col: usize,
+}
+impl<'a> fmt::Display for EmptyChar<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
             format!(
-                "    Got: \"{}\"\n",
-                match self.actual {
-                    ' ' => "WHITESPACE",
-                    '\n' => "NEWLINE",
-                    '\t' => "TAB",
-                    '\r' => "CARRIAGE RETURN",
-                    _ => actual.as_str(),
-                }
+                r#"
+[EMPTY CHARACTER LITERAL] at line {line}, col {col_start}-{col_end}
+    Character literals should not be empty
+------{border}
+{line:COL_WIDTH$} | {line_text}
+{none:COL_WIDTH$} | {highlight}
+------{border}
+"#,
+                line = self.line + 1,
+                col_start = self.col + 1,
+                col_end = self.col + 2,
+                border = "-".repeat(self.line_text.len()),
+                highlight = " ".repeat(self.col) + &"^^",
+                line_text = self.line_text,
+                none = " ",
             )
-            .as_str(),
-        );
-        let line_length = self.line_text.len();
-        let border = "-".repeat(line_length);
-        let highlight = " ".repeat(self.start_pos.1 - 2) + &"^^^";
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg.push_str(
-            format!(
-                "{:width$} | {}\n",
-                self.start_pos.0,
-                self.line_text,
-                width = 3
-            )
-            .as_str(),
-        );
-        msg.push_str(format!("    | {}\n", highlight).as_str());
-        msg.push_str(format!("------{}\n", border).as_str());
-        msg
+            .trim(),
+        )
     }
 }

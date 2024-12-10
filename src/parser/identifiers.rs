@@ -18,32 +18,24 @@
 //! - [Indexable] cannot be [Indexable]
 use crate::lexer::token::Token;
 use crate::parser::productions::{
-    AccessType, FieldAccess, FnCall, GroupAccess, IndexedId, Production, Range,
+    AccessType, FieldAccess, FnCall, GroupAccess, IndexedId, Production,
 };
 
 /// General ident enum used in situations where it does not matter the context; all idents are allowed
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Identifier {
     Token(Token),
     FnCall(FnCall),
     Indexed(IndexedId),
     Access(AccessType),
 }
-impl Production for Identifier {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Identifier {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(decl) => decl.range(),
-            Self::FnCall(fn_call) => fn_call.range(),
-            Self::Indexed(idx) => idx.range(),
-            Self::Access(access) => access.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Token(decl) => decl.string(n),
-            Self::FnCall(fn_call) => fn_call.string(n),
-            Self::Indexed(idx) => idx.string(n),
-            Self::Access(access) => access.string(n),
+            Self::Token(decl) => decl.to_string(source, n),
+            Self::FnCall(fn_call) => fn_call.to_string(source, n),
+            Self::Indexed(idx) => idx.to_string(source, n),
+            Self::Access(access) => access.to_string(source, n),
         }
     }
 }
@@ -52,25 +44,18 @@ impl Production for Identifier {
 /// - `aqua = 1~`
 /// - `aqua[1] = "something"~`
 /// - `aqua.age = 18~`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Assignable {
     Token(Token),
     Indexed(IndexedId),
     Access(GroupAccess<FieldAccess>),
 }
-impl Production for Assignable {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Assignable {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(id) => id.range(),
-            Self::Indexed(idx) => idx.range(),
-            Self::Access(access) => access.range(),
-        }
-    }
-    fn string(&self, indent: usize) -> String {
-        match self {
-            Self::Token(id) => id.string(indent),
-            Self::Indexed(idx) => idx.string(indent),
-            Self::Access(access) => access.string(indent),
+            Self::Token(id) => id.to_string(source, n),
+            Self::Indexed(idx) => idx.to_string(source, n),
+            Self::Access(access) => access.to_string(source, n),
         }
     }
 }
@@ -78,47 +63,34 @@ impl Production for Assignable {
 /// Productions that can be indexed into
 /// - `aqua[1]`
 /// - `aqua()[1]`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Indexable {
     Token(Token),
     FnCall(FnCall),
 }
-impl Production for Indexable {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Indexable {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.range(),
-            Self::FnCall(fn_call) => fn_call.range(),
-        }
-    }
-    fn string(&self, indent: usize) -> String {
-        match self {
-            Self::Token(tok) => tok.string(indent),
-            Self::FnCall(fn_call) => fn_call.string(indent),
+            Self::Token(tok) => tok.to_string(source, n),
+            Self::FnCall(fn_call) => fn_call.to_string(source, n),
         }
     }
 }
 
 /// Productions that can access class fields/methods
 /// - `aqua.arms[1].wind_up().punch()~`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Accessor {
     Token(Token),
     FnCall(FnCall),
     IndexedId(IndexedId),
 }
-impl Production for Accessor {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Accessor {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.range(),
-            Self::FnCall(fn_call) => fn_call.range(),
-            Self::IndexedId(id) => id.range(),
-        }
-    }
-    fn string(&self, indent: usize) -> String {
-        match self {
-            Self::Token(tok) => tok.string(indent),
-            Self::FnCall(fn_call) => fn_call.string(indent),
-            Self::IndexedId(id) => id.string(indent),
+            Self::Token(tok) => tok.to_string(source, n),
+            Self::FnCall(fn_call) => fn_call.to_string(source, n),
+            Self::IndexedId(id) => id.to_string(source, n),
         }
     }
 }

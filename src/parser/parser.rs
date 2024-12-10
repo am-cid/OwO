@@ -3,7 +3,7 @@ use crate::errors::parse_errors::{
     BodyType, EmptyBodyError, NoMainError, NonCallableInPipelineError,
     ParamAfterVariadicParamError, UnexpectedTokenError,
 };
-use crate::lexer::token::{Token, TokenKind};
+use crate::lexer::token::{Token, TokenKind, TokenPosition};
 use crate::parser::data_types::{DataType, MapType, SetType, VecType, Vectorable};
 use crate::parser::identifiers::*;
 use crate::parser::productions::*;
@@ -41,18 +41,19 @@ impl Precedence {
     }
 }
 
-pub struct Parser {
-    pub source: &'static str,
+pub struct Parser<'a> {
+    pub source: &'a str,
     pub program: Program,
     pub error: String,
     tokens: Vec<Token>,
     pos: usize,
-    prefix_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Expression, ()>>,
-    infix_parse_fns: HashMap<TokenKind, fn(&mut Self, Expression) -> Result<Expression, ()>>,
-    body_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Statement, ()>>,
+    prefix_parse_fns: HashMap<TokenKind, for<'b> fn(&mut Self) -> Result<Expression, ()>>,
+    infix_parse_fns:
+        HashMap<TokenKind, for<'b> fn(&mut Self, Expression) -> Result<Expression, ()>>,
+    body_parse_fns: HashMap<TokenKind, for<'b> fn(&mut Self) -> Result<Statement, ()>>,
 }
-impl Parser {
-    pub fn new(source: &'static str, tokens: Vec<Token>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(source: &'a str, tokens: Vec<Token>) -> Self {
         let mut parser = Self {
             source,
             program: Program::default(),
@@ -162,9 +163,8 @@ impl Parser {
         let mut methods: Vec<GroupMethod> = vec![];
         let mut contracts: Vec<Contract> = vec![];
         let mut globals: Vec<Statement> = vec![];
-        // keeping track of range
         let start = self.curr_tok().pos;
-        let mut end = (0, 0);
+        let mut end = TokenPosition::zero();
         while !self.curr_tok_is(TokenKind::EOF) {
             match self.curr_tok().kind {
                 TokenKind::Fun => match self.peek_tok().kind {
@@ -191,7 +191,7 @@ impl Parser {
                 }
             }
             if self.peek_tok_is(TokenKind::EOF) {
-                end = self.curr_tok().end_pos;
+                end = self.curr_tok().pos;
             }
             self.advance(1);
         }
@@ -204,14 +204,15 @@ impl Parser {
                     methods,
                     contracts,
                     globals,
-                    range: Range::new(start, end),
                 };
                 Ok(())
             }
             None => {
-                self.error =
-                    NoMainError::new(self.source.lines().nth(end.0).unwrap_or_default(), end)
-                        .message();
+                self.error = NoMainError::new(
+                    self.source.lines().nth(end.line).unwrap_or_default(),
+                    (end.line, end.col),
+                )
+                .message();
                 Err(())
             }
         }
@@ -235,7 +236,6 @@ impl Parser {
             dtype,
             params,
             body,
-            range: Range::new(start, end),
         })
     }
     /// starts with [TokenType::Fun] in current
@@ -264,7 +264,6 @@ impl Parser {
             dtype,
             params,
             body,
-            range: Range::new(start, end),
         })
     }
     /// starts with [TokenType::Group] in current
@@ -305,7 +304,6 @@ impl Parser {
             id,
             contracts,
             fields,
-            range: Range::new(start, end),
         })
     }
     /// starts with [TokenType::LParen] in current
@@ -365,7 +363,6 @@ impl Parser {
                 id,
                 dtype,
                 variadic,
-                range: Range::new(id.pos, self.curr_tok().end_pos),
             },
             variadic,
         ))
@@ -394,11 +391,7 @@ impl Parser {
         let dtype = self
             .expect_peek_is_type()
             .and_then(|tok| self.parse_data_type(tok, self.curr_tok().pos))?;
-        Ok(GroupField {
-            id,
-            dtype,
-            range: Range::new(id.pos, self.curr_tok().end_pos),
-        })
+        Ok(GroupField { id, dtype })
     }
     /// starts with [TokenType::Contract] in current
     /// ends with [TokenType::RBrace] in current
@@ -425,11 +418,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RBrace)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Contract {
-            id,
-            signatures,
-            range: Range::new(start, end),
-        })
+        Ok(Contract { id, signatures })
     }
 
     /// starts with [TokenType::Identifier] in peek
@@ -459,7 +448,6 @@ impl Parser {
             id: fn_id,
             dtype,
             params,
-            range: Range::new(start, end),
         })
     }
     /// starts with [TokenType::LBrace] in current
@@ -508,10 +496,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RBrace)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Body {
-            statements,
-            range: Range::new(start, end),
-        })
+        Ok(Body { statements })
     }
     /// starts with [TokenType::Hi] in current
     /// ends with [TokenType::Terminator] in current
@@ -541,7 +526,6 @@ impl Parser {
             optional,
             mutable,
             expr,
-            range: Range::new(start, end),
         }))
     }
     /// starts with [DataType]'s first token in current
@@ -557,17 +541,10 @@ impl Parser {
                 self.advance(2);
                 match self.curr_tok().kind {
                     TokenKind::RBrace => match self.peek_tok().kind {
-                        TokenKind::LBracket => self.parse_vector_type(
-                            Vectorable::Set(SetType {
-                                tok,
-                                range: Range::new(start, self.curr_tok().end_pos),
-                            }),
-                            start,
-                        ),
-                        _ => Ok(DataType::Set(SetType {
-                            tok,
-                            range: Range::new(start, self.curr_tok().end_pos),
-                        })),
+                        TokenKind::LBracket => {
+                            self.parse_vector_type(Vectorable::Set(SetType { tok }), start)
+                        }
+                        _ => Ok(DataType::Set(SetType { tok })),
                     },
                     TokenKind::Type
                     | TokenKind::Chan
@@ -581,11 +558,7 @@ impl Parser {
                         let end = self
                             .expect_peek_is(TokenKind::RBrace)
                             .and_then(|tok| Ok(tok.end_pos))?;
-                        let res = MapType {
-                            tok,
-                            inner,
-                            range: Range::new(start, end),
-                        };
+                        let res = MapType { tok, inner };
                         match self.peek_tok().kind {
                             TokenKind::LBracket => {
                                 self.parse_vector_type(Vectorable::Map(res), start)
@@ -614,11 +587,7 @@ impl Parser {
         self.advance(1);
         let dim = self.expect_peek_is(TokenKind::IntLiteral)?;
         self.expect_peek_is(TokenKind::RBracket)?;
-        Ok(DataType::Vec(VecType {
-            id,
-            dim,
-            range: Range::new(start, self.curr_tok().end_pos),
-        }))
+        Ok(DataType::Vec(VecType { id, dim }))
     }
     /// starts with [TokenType::Identifier] in current
     /// ends with [TokenType::Terminator] in current
@@ -634,7 +603,6 @@ impl Parser {
             dtype: None,
             assign_op,
             expr,
-            range: Range::new(start, end),
         })
     }
     /// starts with valid starting token for a Value in peek
@@ -690,10 +658,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::Terminator)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Statement::Return(ReturnStatement {
-            expr,
-            range: Range::new(start, end),
-        }))
+        Ok(Statement::Return(ReturnStatement { expr }))
     }
     /// starts with [TokenType::Iwf] in current
     /// ends with [TokenType::RBrace] in current
@@ -722,7 +687,6 @@ impl Parser {
             body,
             elifs,
             else_block,
-            range: Range::new(start, end),
         }))
     }
     /// starts with [TokenType::Ewif] in peek
@@ -739,11 +703,7 @@ impl Parser {
             })?;
             let body = self.parse_body(BodyType::If)?;
             let end = self.curr_tok().end_pos;
-            res.push(ElifStatement {
-                condition,
-                body,
-                range: Range::new(start, end),
-            })
+            res.push(ElifStatement { condition, body })
         }
         Ok(res)
     }
@@ -791,7 +751,6 @@ impl Parser {
             condition,
             update,
             body,
-            range: Range::new(start, end),
         }))
     }
     /// starts with [TokenType::Identifier] in peek
@@ -808,7 +767,6 @@ impl Parser {
             item_id,
             collection,
             body,
-            range: Range::new(start, end),
         }))
     }
     /// starts with [TokenType::Bweak] in current
@@ -868,7 +826,6 @@ impl Parser {
             expr,
             cases,
             default,
-            range: Range { start, end },
         }))
     }
     /// starts with a [DataType]'s first token in current
@@ -882,11 +839,7 @@ impl Parser {
             .expect_peek_is(TokenKind::Colon)
             .and_then(|_| self.parse_case_body())?;
         let end = self.curr_tok().pos;
-        Ok(Case {
-            case_type,
-            body,
-            range: Range::new(start, end),
-        })
+        Ok(Case { case_type, body })
     }
 
     /// starts with [TokenType::Colon] in current
@@ -969,10 +922,7 @@ impl Parser {
                 return Err(());
             }
         };
-        Ok(Body {
-            statements,
-            range: Range::new(start, end),
-        })
+        Ok(Body { statements })
     }
 
     /// This parses three possible ident statements: assignments, function/method calls, pipelines
@@ -1048,7 +998,6 @@ impl Parser {
         Ok(FnCall {
             id,
             args,
-            range: Range::new(start, end),
             signature: FnSignature::default(),
         })
     }
@@ -1065,7 +1014,6 @@ impl Parser {
         Ok(Expression::Prefix(PrefixExpression {
             op,
             right: Box::new(right),
-            range: Range::new(start, end),
         }))
     }
     /// starts with infix operator in current
@@ -1079,7 +1027,6 @@ impl Parser {
             left: Box::new(left),
             op,
             right: Box::new(right),
-            range: Range::new(start, end),
         }))
     }
     /// starts with [TokenType::LParen] in current
@@ -1090,10 +1037,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RParen)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Expression::Grouped(GroupedExpression {
-            expr,
-            range: Range::new(start, end),
-        }))
+        Ok(Expression::Grouped(GroupedExpression { expr }))
     }
     /*
      * LITERAL PARSERS
@@ -1127,10 +1071,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RBracket)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Expression::Array(ArrayLiteral {
-            exprs,
-            range: Range::new(start, end),
-        }))
+        Ok(Expression::Array(ArrayLiteral { exprs }))
     }
     /// starts with Hash in current
     /// starts with RBracket in current
@@ -1147,19 +1088,13 @@ impl Parser {
             // empty set: #[]
             TokenKind::RBracket => {
                 self.advance(1);
-                return Ok(Expression::Set(SetLiteral {
-                    exprs: vec![],
-                    range: Range::new(start, self.curr_tok().end_pos),
-                }));
+                return Ok(Expression::Set(SetLiteral { exprs: vec![] }));
             }
             // empty map: #[:]
             TokenKind::Colon => {
                 self.advance(1);
                 self.expect_peek_is(TokenKind::RBracket)?;
-                return Ok(Expression::Map(MapLiteral {
-                    exprs: vec![],
-                    range: Range::new(start, self.curr_tok().end_pos),
-                }));
+                return Ok(Expression::Map(MapLiteral { exprs: vec![] }));
             }
             _ => (),
         }
@@ -1169,7 +1104,6 @@ impl Parser {
                 self.advance(1);
                 Ok(Expression::Set(SetLiteral {
                     exprs: vec![first_expr],
-                    range: Range::new(start, self.curr_tok().end_pos),
                 }))
             }
             TokenKind::Comma => self.parse_set_literal(first_expr, start),
@@ -1197,10 +1131,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RBracket)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Expression::Set(SetLiteral {
-            exprs,
-            range: Range::new(start, end),
-        }))
+        Ok(Expression::Set(SetLiteral { exprs }))
     }
     /// starts with [TokenType::Colon] in peek (always), with first key already parsed
     /// ends with [TokenType::RBracket] in current
@@ -1223,10 +1154,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RBracket)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Expression::Map(MapLiteral {
-            exprs,
-            range: Range::new(start, end),
-        }))
+        Ok(Expression::Map(MapLiteral { exprs }))
     }
 
     /*
@@ -1265,7 +1193,6 @@ impl Parser {
             _ => Ok(Expression::Pipeline(Pipeline {
                 first: Box::new(first),
                 rest,
-                range: Range::new(start, end),
             })),
         }
     }
@@ -1328,20 +1255,17 @@ impl Parser {
                 Accessor::Token(tok) => Ok(Identifier::Access(AccessType::Field(GroupAccess {
                     accessed,
                     access_type: std::marker::PhantomData,
-                    range: Range::new(start, tok.end_pos),
                 }))),
                 Accessor::IndexedId(idx) => {
                     Ok(Identifier::Access(AccessType::Field(GroupAccess {
                         accessed,
                         access_type: std::marker::PhantomData,
-                        range: Range::new(start, idx.range().end),
                     })))
                 }
                 Accessor::FnCall(fn_call) => {
                     Ok(Identifier::Access(AccessType::Method(GroupAccess {
                         accessed,
                         access_type: std::marker::PhantomData,
-                        range: Range::new(start, fn_call.range().end),
                     })))
                 }
             }
@@ -1399,7 +1323,6 @@ impl Parser {
             id = Accessor::IndexedId(IndexedId {
                 id: init_id,
                 indices,
-                range: Range::new(start, end),
             });
         }
         Ok(id)
@@ -1422,11 +1345,7 @@ impl Parser {
         let end = self
             .expect_peek_is(TokenKind::RParen)
             .and_then(|tok| Ok(tok.end_pos))?;
-        Ok(Expression::GroupInit(GroupInit {
-            id,
-            args,
-            range: Range::new(start, end),
-        }))
+        Ok(Expression::GroupInit(GroupInit { id, args }))
     }
 
     /*
@@ -1434,10 +1353,7 @@ impl Parser {
      */
     /// maps a TokenType to a respective parsing function
     /// user can supply own parsing function
-    fn register_prefix(
-        &mut self,
-        args: Vec<(TokenKind, fn(&mut Parser) -> Result<Expression, ()>)>,
-    ) {
+    fn register_prefix(&mut self, args: Vec<(TokenKind, fn(&mut Self) -> Result<Expression, ()>)>) {
         args.into_iter().for_each(|(token_kind, parse_fn)| {
             self.prefix_parse_fns.insert(token_kind, parse_fn);
         })
@@ -1452,7 +1368,7 @@ impl Parser {
     }
     /// maps a TokenType to a respective parsing function
     /// user can supply own parsing function
-    fn register_body(&mut self, args: Vec<(TokenKind, fn(&mut Parser) -> Result<Statement, ()>)>) {
+    fn register_body(&mut self, args: Vec<(TokenKind, fn(&mut Self) -> Result<Statement, ()>)>) {
         args.into_iter().for_each(|(token_kind, parse_fn)| {
             self.body_parse_fns.insert(token_kind, parse_fn);
         })
@@ -1617,8 +1533,8 @@ impl Parser {
      */
     fn unexpected_token_error(
         &mut self,
-        header: Option<&'static str>,
-        context: Option<&'static str>,
+        header: Option<&'a str>,
+        context: Option<&'a str>,
         actual: Token,
         expected: &[TokenKind],
     ) {
@@ -1637,7 +1553,7 @@ impl Parser {
         &mut self,
         expected: Vec<TokenKind>,
         body_type: BodyType,
-        line_text: &'static str,
+        line_text: &'a str,
         r_bracket_pos: (usize, usize),
     ) {
         self.error = EmptyBodyError::new(expected, body_type, line_text, r_bracket_pos).message()

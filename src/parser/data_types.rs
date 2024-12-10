@@ -17,30 +17,22 @@
 //! - equality checks the data type, the inner data type, and the fact that its a [MapType]
 
 use crate::lexer::token::{Token, TokenKind};
-use crate::parser::productions::{Production, Range};
+use crate::parser::productions::Production;
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum DataType {
     Token(Token),
     Vec(VecType),
     Set(SetType),
     Map(MapType),
 }
-impl Production for DataType {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for DataType {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.range(),
-            Self::Vec(vec) => vec.range(),
-            Self::Set(set) => set.range(),
-            Self::Map(map) => map.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Token(tok) => tok.string(n),
-            Self::Vec(vec) => vec.string(n),
-            Self::Set(set) => set.string(n),
-            Self::Map(map) => map.string(n),
+            Self::Token(tok) => tok.to_string(source, n),
+            Self::Vec(vec) => vec.to_string(source, n),
+            Self::Set(set) => set.to_string(source, n),
+            Self::Map(map) => map.to_string(source, n),
         }
     }
 }
@@ -49,60 +41,53 @@ impl Default for DataType {
         Self::Token(Token::default())
     }
 }
-impl PartialEq for DataType {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Token(tok), Self::Token(other_tok)) => match (tok.kind, other_tok.kind) {
-                (TokenKind::Dono, TokenKind::Dono)
-                | (
-                    TokenKind::Type
-                    | TokenKind::Chan
-                    | TokenKind::Kun
-                    | TokenKind::Senpai
-                    | TokenKind::Kouhai
-                    | TokenKind::San
-                    | TokenKind::Sama,
-                    TokenKind::Dono,
-                )
-                | (
-                    TokenKind::Dono,
-                    TokenKind::Type
-                    | TokenKind::Chan
-                    | TokenKind::Kun
-                    | TokenKind::Senpai
-                    | TokenKind::Kouhai
-                    | TokenKind::San
-                    | TokenKind::Sama,
-                ) => true,
-                _ => false,
-            },
-            (Self::Vec(vec), Self::Vec(other_vec)) => vec == other_vec,
-            (Self::Set(set), Self::Set(other_set)) => set == other_set,
-            (Self::Map(map), Self::Map(other_map)) => map == other_map,
-            _ => false,
-        }
-    }
-}
+// impl PartialEq for DataType {
+//     fn eq(&self, other: &Self) -> bool {
+//         match (self, other) {
+//             (Self::Token(tok), Self::Token(other_tok)) => match (tok.kind, other_tok.kind) {
+//                 (TokenKind::Dono, TokenKind::Dono)
+//                 | (
+//                     TokenKind::Type
+//                     | TokenKind::Chan
+//                     | TokenKind::Kun
+//                     | TokenKind::Senpai
+//                     | TokenKind::Kouhai
+//                     | TokenKind::San
+//                     | TokenKind::Sama,
+//                     TokenKind::Dono,
+//                 )
+//                 | (
+//                     TokenKind::Dono,
+//                     TokenKind::Type
+//                     | TokenKind::Chan
+//                     | TokenKind::Kun
+//                     | TokenKind::Senpai
+//                     | TokenKind::Kouhai
+//                     | TokenKind::San
+//                     | TokenKind::Sama,
+//                 ) => true,
+//                 _ => false,
+//             },
+//             (Self::Vec(vec), Self::Vec(other_vec)) => vec == other_vec,
+//             (Self::Set(set), Self::Set(other_set)) => set == other_set,
+//             (Self::Map(map), Self::Map(other_map)) => map == other_map,
+//             _ => false,
+//         }
+//     }
+// }
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Vectorable {
     Token(Token),
     Set(SetType),
     Map(MapType),
 }
-impl Production for Vectorable {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Vectorable {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.range(),
-            Self::Set(set) => set.range(),
-            Self::Map(map) => map.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Token(tok) => tok.string(n),
-            Self::Set(set) => set.string(n),
-            Self::Map(map) => map.string(n),
+            Self::Token(tok) => tok.to_string(source, n),
+            Self::Set(set) => set.to_string(source, n),
+            Self::Map(map) => map.to_string(source, n),
         }
     }
 }
@@ -111,74 +96,62 @@ impl Default for Vectorable {
         Self::Token(Token::default())
     }
 }
-impl PartialEq for Vectorable {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Token(tok), Self::Token(other_tok)) => match (tok.kind, other_tok.kind) {
-                (TokenKind::Dono, TokenKind::Dono)
-                | (
-                    TokenKind::Type
-                    | TokenKind::Chan
-                    | TokenKind::Kun
-                    | TokenKind::Senpai
-                    | TokenKind::Kouhai
-                    | TokenKind::San
-                    | TokenKind::Sama,
-                    TokenKind::Dono,
-                )
-                | (
-                    TokenKind::Dono,
-                    TokenKind::Type
-                    | TokenKind::Chan
-                    | TokenKind::Kun
-                    | TokenKind::Senpai
-                    | TokenKind::Kouhai
-                    | TokenKind::San
-                    | TokenKind::Sama,
-                ) => true,
-                _ => false,
-            },
-            (Self::Set(set), Self::Set(other_set)) => set == other_set,
-            (Self::Map(map), Self::Map(other_map)) => map == other_map,
-            _ => false,
-        }
-    }
-}
+// impl PartialEq for Vectorable {
+//     fn eq(&self, other: &Self) -> bool {
+//         match (self, other) {
+//             (Self::Token(tok), Self::Token(other_tok)) => match (tok.kind, other_tok.kind) {
+//                 (TokenKind::Dono, TokenKind::Dono)
+//                 | (
+//                     TokenKind::Type
+//                     | TokenKind::Chan
+//                     | TokenKind::Kun
+//                     | TokenKind::Senpai
+//                     | TokenKind::Kouhai
+//                     | TokenKind::San
+//                     | TokenKind::Sama,
+//                     TokenKind::Dono,
+//                 )
+//                 | (
+//                     TokenKind::Dono,
+//                     TokenKind::Type
+//                     | TokenKind::Chan
+//                     | TokenKind::Kun
+//                     | TokenKind::Senpai
+//                     | TokenKind::Kouhai
+//                     | TokenKind::San
+//                     | TokenKind::Sama,
+//                 ) => true,
+//                 _ => false,
+//             },
+//             (Self::Set(set), Self::Set(other_set)) => set == other_set,
+//             (Self::Map(map), Self::Map(other_map)) => map == other_map,
+//             _ => false,
+//         }
+//     }
+// }
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct VecType {
     pub id: Vectorable,
     pub dim: Token,
-    pub range: Range,
 }
-impl Production for VecType {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        format!("{}[{}]", self.id.string(n), self.dim)
-    }
-}
-impl PartialEq for VecType {
-    fn eq(&self, other: &Self) -> bool {
-        match self.dim == other.dim {
-            false => false,
-            true => self == other,
-        }
+impl<'a> Production<'a> for VecType {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        format!(
+            "{}[{}]",
+            self.id.to_string(source, n),
+            self.dim.str_from_source(source)
+        )
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct SetType {
     pub tok: Token,
-    pub range: Range,
 }
-impl Production for SetType {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        format!("{}{{}}", self.tok.string(n))
+impl<'a> Production<'a> for SetType {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        format!("{}{{}}", self.tok.to_string(source, n))
     }
 }
 impl PartialEq for SetType {
@@ -210,46 +183,46 @@ impl PartialEq for SetType {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct MapType {
     pub tok: Token,
     pub inner: Box<DataType>,
-    pub range: Range,
 }
-impl Production for MapType {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        format!("{}{{{}}}", self.tok.string(n), self.inner.string(0))
-    }
-}
-impl PartialEq for MapType {
-    fn eq(&self, other: &Self) -> bool {
-        let first = match (self.tok.kind, other.tok.kind) {
-            (TokenKind::Dono, TokenKind::Dono)
-            | (
-                TokenKind::Type
-                | TokenKind::Chan
-                | TokenKind::Kun
-                | TokenKind::Senpai
-                | TokenKind::Kouhai
-                | TokenKind::San
-                | TokenKind::Sama,
-                TokenKind::Dono,
-            )
-            | (
-                TokenKind::Dono,
-                TokenKind::Type
-                | TokenKind::Chan
-                | TokenKind::Kun
-                | TokenKind::Senpai
-                | TokenKind::Kouhai
-                | TokenKind::San
-                | TokenKind::Sama,
-            ) => true,
-            _ => false,
-        };
-        first && self.inner == other.inner
+impl<'a> Production<'a> for MapType {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        format!(
+            "{}{{{}}}",
+            self.tok.to_string(source, n),
+            self.inner.to_string(source, 0)
+        )
     }
 }
+// impl PartialEq for MapType {
+//     fn eq(&self, other: &Self) -> bool {
+//         let first = match (self.tok.kind, other.tok.kind) {
+//             (TokenKind::Dono, TokenKind::Dono)
+//             | (
+//                 TokenKind::Type
+//                 | TokenKind::Chan
+//                 | TokenKind::Kun
+//                 | TokenKind::Senpai
+//                 | TokenKind::Kouhai
+//                 | TokenKind::San
+//                 | TokenKind::Sama,
+//                 TokenKind::Dono,
+//             )
+//             | (
+//                 TokenKind::Dono,
+//                 TokenKind::Type
+//                 | TokenKind::Chan
+//                 | TokenKind::Kun
+//                 | TokenKind::Senpai
+//                 | TokenKind::Kouhai
+//                 | TokenKind::San
+//                 | TokenKind::Sama,
+//             ) => true,
+//             _ => false,
+//         };
+//         first && self.inner == other.inner
+//     }
+// }

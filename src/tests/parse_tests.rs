@@ -489,9 +489,9 @@ fn assert_formatted_eq(source: &'static str, formatted: &'static str) -> () {
     let _ = parser.parse_program();
     assert_eq!(
         formatted,
-        parser.program.string(0),
+        parser.program.to_string(0),
         "expected:\n{}\n===\nactual:\n{}",
         formatted,
-        parser.program.string(0),
+        parser.program.to_string(0),
     )
 }

@@ -1,4 +1,4 @@
-use crate::lexer::token::{Token, TokenKind};
+use crate::lexer::token::{Offset, Token, TokenKind};
 use crate::parser::data_types::DataType;
 use crate::parser::identifiers::{Accessor, Assignable, Identifier, Indexable};
 use crate::utils::string::StringExt;
@@ -10,33 +10,26 @@ use crate::utils::string::StringExt;
 /// - [Pipeline]
 const MAX_LINE_LENGTH: usize = 60;
 
-pub trait Production {
-    fn range(&self) -> Range;
-    fn string(&self, n: usize) -> String;
+pub trait Production<'a> {
+    fn to_string(&self, source: &'a str, n: usize) -> String;
     // fn transpile(&self, indent: usize) -> String;
 }
-impl Production for Token {
-    fn range(&self) -> Range {
-        Range::new(self.pos, self.end_pos)
-    }
-    fn string(&self, _: usize) -> String {
-        self.text.to_string()
+impl<'a> Production<'a> for Token {
+    fn to_string(&self, source: &'a str, _n: usize) -> String {
+        self.str_from_source(source).to_string()
+        // self.text.to_string()
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Default, Copy)]
-pub struct Range {
-    pub start: (usize, usize),
-    pub end: (usize, usize),
-}
-impl Range {
-    pub fn new(start: (usize, usize), end: (usize, usize)) -> Self {
-        Self { start, end }
-    }
+pub struct ProductionSpan {
+    pub abs: Offset,
+    pub line: usize,
+    pub col: usize,
 }
 
 /// Statements define actions and logic
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Statement {
     Declaration(Declaration),
     Assignment(Assignment),
@@ -51,43 +44,27 @@ pub enum Statement {
     Pipeline(Pipeline),
     Return(ReturnStatement),
 }
-impl Production for Statement {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Statement {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Declaration(res) => res.range(),
-            Self::Assignment(res) => res.range(),
-            Self::If(res) => res.range(),
-            Self::Mash(res) => res.range(),
-            Self::ForLoop(res) => res.range(),
-            Self::ForEach(res) => res.range(),
-            Self::Break(res) => res.range(),
-            Self::Continue(res) => res.range(),
-            Self::FnCall(res) => res.range(),
-            Self::Method(res) => res.range(),
-            Self::Pipeline(res) => res.range(),
-            Self::Return(res) => res.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Declaration(res) => res.string(n).indent(n),
-            Self::Assignment(res) => res.string(n).indent(n),
-            Self::If(res) => res.string(n).indent(n),
-            Self::Mash(res) => res.string(n).indent(n),
-            Self::ForLoop(res) => res.string(n).indent(n),
-            Self::ForEach(res) => res.string(n).indent(n),
-            Self::Break(res) => res.string(n).indent(n) + "~",
-            Self::Continue(res) => res.string(n).indent(n) + "~",
-            Self::FnCall(res) => res.string(n).indent(n) + "~",
-            Self::Method(res) => res.string(n).indent(n) + "~",
-            Self::Pipeline(res) => res.string(n).indent(n) + "~",
-            Self::Return(res) => res.string(n).indent(n),
+            Self::Declaration(res) => res.to_string(source, n).indent(n),
+            Self::Assignment(res) => res.to_string(source, n).indent(n),
+            Self::If(res) => res.to_string(source, n).indent(n),
+            Self::Mash(res) => res.to_string(source, n).indent(n),
+            Self::ForLoop(res) => res.to_string(source, n).indent(n),
+            Self::ForEach(res) => res.to_string(source, n).indent(n),
+            Self::Break(res) => res.to_string(source, n).indent(n) + "~",
+            Self::Continue(res) => res.to_string(source, n).indent(n) + "~",
+            Self::FnCall(res) => res.to_string(source, n).indent(n) + "~",
+            Self::Method(res) => res.to_string(source, n).indent(n) + "~",
+            Self::Pipeline(res) => res.to_string(source, n).indent(n) + "~",
+            Self::Return(res) => res.to_string(source, n).indent(n),
         }
     }
 }
 
 /// Expressions define computations and operations that generate values
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Expression {
     Ident(Identifier),
     GroupInit(GroupInit),
@@ -99,37 +76,24 @@ pub enum Expression {
     Infix(InfixExpression),
     Grouped(GroupedExpression),
 }
-impl Production for Expression {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Expression {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Ident(res) => res.range(),
-            Self::GroupInit(res) => res.range(),
-            Self::Pipeline(res) => res.range(),
-            Self::Array(res) => res.range(),
-            Self::Set(res) => res.range(),
-            Self::Map(res) => res.range(),
-            Self::Prefix(res) => res.range(),
-            Self::Infix(res) => res.range(),
-            Self::Grouped(res) => res.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Ident(res) => res.string(n),
-            Self::GroupInit(res) => res.string(n),
-            Self::Pipeline(res) => res.string(n),
-            Self::Array(res) => res.string(n),
-            Self::Set(res) => res.string(n),
-            Self::Map(res) => res.string(n),
-            Self::Prefix(res) => res.string(n),
-            Self::Infix(res) => res.string(n),
-            Self::Grouped(res) => res.string(n),
+            Self::Ident(res) => res.to_string(source, n),
+            Self::GroupInit(res) => res.to_string(source, n),
+            Self::Pipeline(res) => res.to_string(source, n),
+            Self::Array(res) => res.to_string(source, n),
+            Self::Set(res) => res.to_string(source, n),
+            Self::Map(res) => res.to_string(source, n),
+            Self::Prefix(res) => res.to_string(source, n),
+            Self::Infix(res) => res.to_string(source, n),
+            Self::Grouped(res) => res.to_string(source, n),
         }
     }
 }
 
 /// Root node of the AST
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct Program {
     pub main: Function,
     pub functions: Vec<Function>,
@@ -137,13 +101,9 @@ pub struct Program {
     pub methods: Vec<GroupMethod>,
     pub contracts: Vec<Contract>,
     pub globals: Vec<Statement>,
-    pub range: Range,
 }
-impl Production for Program {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, _: usize) -> String {
+impl<'a> Production<'a> for Program {
+    fn to_string(&self, source: &'a str, _n: usize) -> String {
         format!(
             "{}{}{}{}{}{}",
             match &self.globals.len() {
@@ -151,17 +111,17 @@ impl Production for Program {
                 _ => self
                     .globals
                     .iter()
-                    .map(|global| global.string(0) + "\n")
+                    .map(|global| global.to_string(source, 0) + "\n")
                     .collect::<Vec<_>>()
                     .join(""),
             },
-            self.main.string(0) + "\n",
+            self.main.to_string(source, 0) + "\n",
             match &self.functions.len() {
                 0 => "".to_string(),
                 _ => self
                     .functions
                     .iter()
-                    .map(|func| func.string(0) + "\n")
+                    .map(|func| func.to_string(source, 0) + "\n")
                     .collect::<Vec<_>>()
                     .join(""),
             },
@@ -170,7 +130,7 @@ impl Production for Program {
                 _ => self
                     .groups
                     .iter()
-                    .map(|group| group.string(0) + "\n")
+                    .map(|group| group.to_string(source, 0) + "\n")
                     .collect::<Vec<_>>()
                     .join(""),
             },
@@ -179,7 +139,7 @@ impl Production for Program {
                 _ => self
                     .methods
                     .iter()
-                    .map(|group| group.string(0) + "\n")
+                    .map(|group| group.to_string(source, 0) + "\n")
                     .collect::<Vec<_>>()
                     .join(""),
             },
@@ -188,7 +148,7 @@ impl Production for Program {
                 _ => self
                     .contracts
                     .iter()
-                    .map(|contract| contract.string(0) + "\n")
+                    .map(|contract| contract.to_string(source, 0) + "\n")
                     .collect::<Vec<_>>()
                     .join(""),
             },
@@ -201,13 +161,12 @@ impl Production for Program {
 /*
  * GLOBAL PRODUCTIONS
  */
-#[derive(Clone, Debug, Default, Eq, Hash)]
+#[derive(Clone, Debug, Default)]
 pub struct Function {
     pub id: Token,
     pub dtype: DataType,
     pub params: Vec<Param>,
     pub body: Body,
-    pub range: Range,
 }
 impl Function {
     pub fn signature(&self) -> FnSignature {
@@ -220,23 +179,19 @@ impl Function {
                 .into_iter()
                 .map(|param| param.dtype)
                 .collect::<Vec<DataType>>(),
-            range: self.range,
         }
     }
 }
-impl Production for Function {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Function {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "fun {}-{}({} {{\n{}\n}}",
-            self.id,
-            self.dtype.string(0),
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, 0),
             match &self
                 .params
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -245,7 +200,7 @@ impl Production for Function {
                     "{})",
                     self.params
                         .iter()
-                        .map(|param| param.string(n))
+                        .map(|param| param.to_string(source, n))
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
@@ -255,42 +210,33 @@ impl Production for Function {
                         "\n{}",
                         self.params
                             .iter()
-                            .map(|param| param.string(n + 1).indent(n + 1) + ",")
+                            .map(|param| param.to_string(source, n + 1).indent(n + 1) + ",")
                             .collect::<Vec<_>>()
                             .join("\n"),
                     ),
                     format!("\n{}", ")".indent(n),),
                 ),
             },
-            self.body.string(n + 1),
+            self.body.to_string(source, n + 1),
         )
     }
 }
-impl PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        self.signature() == other.signature()
-    }
-}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Group {
     pub id: Token,
     pub contracts: Vec<Token>,
     pub fields: Vec<GroupField>,
-    pub range: Range,
 }
-impl Production for Group {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Group {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "gwoup {}{} {{\n{}\n}}",
-            self.id,
+            self.id.str_from_source(source),
             match &self
                 .contracts
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -300,7 +246,7 @@ impl Production for Group {
                     " [{}]",
                     self.contracts
                         .iter()
-                        .map(|contract| contract.string(n))
+                        .map(|contract| contract.to_string(source, n))
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
@@ -310,7 +256,7 @@ impl Production for Group {
                         "\n{}",
                         self.contracts
                             .iter()
-                            .map(|contract| contract.string(n + 1).indent(n + 1) + ",")
+                            .map(|contract| contract.to_string(source, n + 1).indent(n + 1) + ",")
                             .collect::<Vec<_>>()
                             .join("\n"),
                     ),
@@ -319,14 +265,14 @@ impl Production for Group {
             },
             self.fields
                 .iter()
-                .map(|field| format!("{}", field.string(n + 1).indent(n + 1)))
+                .map(|field| format!("{}", field.to_string(source, n + 1).indent(n + 1)))
                 .collect::<Vec<_>>()
                 .join("\n"),
         )
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default)]
 pub struct GroupMethod {
     pub id: Token,
     pub group: Token,
@@ -334,23 +280,19 @@ pub struct GroupMethod {
     pub dtype: DataType,
     pub params: Vec<Param>,
     pub body: Body,
-    pub range: Range,
 }
-impl Production for GroupMethod {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for GroupMethod {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "fun {}{} {}-{}({} {{\n{}\n}}",
-            self.group,
+            self.group.str_from_source(source),
             if self.mutable { "!" } else { "" },
-            self.id,
-            self.dtype.string(0),
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, 0),
             match &self
                 .params
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -359,7 +301,7 @@ impl Production for GroupMethod {
                     "{})",
                     self.params
                         .iter()
-                        .map(|param| param.string(n))
+                        .map(|param| param.to_string(source, n))
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
@@ -369,61 +311,53 @@ impl Production for GroupMethod {
                         "\n{}",
                         self.params
                             .iter()
-                            .map(|param| param.string(n + 1).indent(n + 1) + ",")
+                            .map(|param| param.to_string(source, n + 1).indent(n + 1) + ",")
                             .collect::<Vec<_>>()
                             .join("\n"),
                     ),
                     format!("\n{}", ")".indent(n),),
                 ),
             },
-            self.body.string(n + 1),
+            self.body.to_string(source, n + 1),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Contract {
     pub id: Token,
     pub signatures: Vec<FnSignature>,
-    pub range: Range,
 }
-impl Production for Contract {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Contract {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "contwact {} {{\n{}\n}}",
-            self.id,
+            self.id.str_from_source(source),
             self.signatures
                 .iter()
-                .map(|signature| signature.string(n + 1))
+                .map(|signature| signature.to_string(source, n + 1))
                 .collect::<Vec<_>>()
                 .join("\n"),
         )
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, Hash)]
+#[derive(Clone, Debug, Default)]
 pub struct FnSignature {
     pub id: Token,
     pub dtype: DataType,
     pub params: Vec<DataType>,
-    pub range: Range,
 }
-impl Production for FnSignature {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for FnSignature {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}-{}({}~",
-            self.id,
-            self.dtype.string(0),
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, 0),
             match &self
                 .params
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -433,7 +367,7 @@ impl Production for FnSignature {
                         "{})",
                         self.params
                             .iter()
-                            .map(|dtype| dtype.string(n))
+                            .map(|dtype| dtype.to_string(source, n))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -445,7 +379,7 @@ impl Production for FnSignature {
                             "\n{}",
                             self.params
                                 .iter()
-                                .map(|dtype| dtype.string(n + 1).indent(n + 1) + ",")
+                                .map(|dtype| dtype.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -457,61 +391,53 @@ impl Production for FnSignature {
         .indent(n)
     }
 }
-impl PartialEq for FnSignature {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.dtype == other.dtype && self.params == other.params
-    }
-}
+// impl PartialEq for FnSignature {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.id == other.id && self.dtype == other.dtype && self.params == other.params
+//     }
+// }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Param {
     pub id: Token,
     pub dtype: DataType,
     pub variadic: bool,
-    pub range: Range,
 }
-impl Production for Param {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Param {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}-{}{}",
-            self.id,
-            self.dtype.string(n),
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, n),
             if self.variadic { "..." } else { "" }
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct GroupField {
     pub id: Token,
     pub dtype: DataType,
-    pub range: Range,
 }
-impl Production for GroupField {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        format!("{}-{}~", self.id, self.dtype.string(n),)
+impl<'a> Production<'a> for GroupField {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        format!(
+            "{}-{}~",
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, n),
+        )
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default)]
 pub struct Body {
     pub statements: Vec<Statement>,
-    pub range: Range,
 }
-impl Production for Body {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Body {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         self.statements
             .iter()
-            .map(|stmt| stmt.string(n))
+            .map(|stmt| stmt.to_string(source, n))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -520,84 +446,72 @@ impl Production for Body {
 /*
  * STATEMENT PRODUCTIONS
  */
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Declaration {
     pub id: Token,
     pub dtype: DataType,
     pub mutable: bool,
     pub optional: bool,
     pub expr: Expression,
-    pub range: Range,
 }
-impl Production for Declaration {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Declaration {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "hi {}-{}{}{} = {}~",
-            self.id,
-            self.dtype.string(n),
+            self.id.str_from_source(source),
+            self.dtype.to_string(source, n),
             if self.mutable { "!" } else { "" },
             if self.optional { "?" } else { "" },
-            self.expr.string(n),
+            self.expr.to_string(source, n),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Assignment {
     pub id: Assignable,
     pub dtype: Option<Token>,
     pub assign_op: Token,
     pub expr: Expression,
-    pub range: Range,
 }
-impl Production for Assignment {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Assignment {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{} {} {}~",
-            self.id.string(n),
-            self.assign_op.string(0),
-            self.expr.string(n + 1),
+            self.id.to_string(source, n),
+            self.assign_op.to_string(source, 0),
+            self.expr.to_string(source, n + 1),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct IfStatement {
     pub condition: Expression,
     pub body: Body,
     pub elifs: Vec<ElifStatement>,
     pub else_block: Option<Body>,
-    pub range: Range,
 }
-impl Production for IfStatement {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for IfStatement {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "iwf {} {{\n{}\n{}{}\n{}",
-            self.condition.string(n),
-            self.body.string(n + 1),
+            self.condition.to_string(source, n),
+            self.body.to_string(source, n + 1),
             match (&self.elifs.len(), &self.else_block) {
                 (0, None) => "}".indent(n),
                 _ => "".to_string(),
             },
             self.elifs
                 .iter()
-                .map(|elif| elif.string(n))
+                .map(|elif| elif.to_string(source, n))
                 .collect::<Vec<_>>()
                 .join("\n"),
             match &self.else_block {
                 Some(block) => format!(
                     "{} {{\n{}\n{}",
                     "} ewse".indent(n),
-                    block.string(n + 1),
+                    block.to_string(source, n + 1),
                     "}".indent(n),
                 ),
                 None => "}".indent(n),
@@ -606,91 +520,75 @@ impl Production for IfStatement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct ElifStatement {
     pub condition: Expression,
     pub body: Body,
-    pub range: Range,
 }
-impl Production for ElifStatement {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for ElifStatement {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{} {} {{\n{}",
             "} ewif".indent(n),
-            self.condition.string(n),
-            self.body.string(n + 1),
+            self.condition.to_string(source, n),
+            self.body.to_string(source, n + 1),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct ForLoop {
     pub init: Declaration,
     pub condition: Expression,
     pub update: Expression,
     pub body: Body,
-    pub range: Range,
 }
-impl Production for ForLoop {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for ForLoop {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             // TODO: format this so if too long, separate init cond and update by newlines
             "fow {} {}~ {} {{\n{}\n{}",
-            self.init.string(n),
-            self.condition.string(n),
-            self.update.string(n),
-            self.body.string(n + 1),
+            self.init.to_string(source, n),
+            self.condition.to_string(source, n),
+            self.update.to_string(source, n),
+            self.body.to_string(source, n + 1),
             "}".indent(n),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct ForEach {
     pub item_id: Token,
     pub collection: Expression,
     pub body: Body,
-    pub range: Range,
 }
-impl Production for ForEach {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for ForEach {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "fow {} in {} {{\n{}\n{}",
-            self.item_id.string(0),
-            self.collection.string(n),
-            self.body.string(n + 1),
+            self.item_id.to_string(source, 0),
+            self.collection.to_string(source, n),
+            self.body.to_string(source, n + 1),
             "}".indent(n),
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct MashStatement {
     pub expr: Expression,
     pub cases: Vec<Case>,
     pub default: Option<Body>,
-    pub range: Range,
 }
-impl Production for MashStatement {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for MashStatement {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "mash {} {{\n{}{}{}",
-            self.expr.string(n),
+            self.expr.to_string(source, n),
             self.cases
                 .iter()
-                .map(|case| case.string(n))
+                .map(|case| case.to_string(source, n))
                 .collect::<Vec<_>>()
                 .join(""),
             match &self.default {
@@ -700,8 +598,8 @@ impl Production for MashStatement {
                         "default".indent(n),
                         match default.statements.len() {
                             0 => unreachable!("Empty bodies aren't allowed during parsing"),
-                            1 => " ".to_string() + default.string(n + 1).trim(),
-                            _ => format!("\n{}", default.string(n + 1)),
+                            1 => " ".to_string() + default.to_string(source, n + 1).trim(),
+                            _ => format!("\n{}", default.to_string(source, n + 1)),
                         }
                     )
                 }
@@ -712,48 +610,40 @@ impl Production for MashStatement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Case {
     pub case_type: DataType,
     pub body: Body,
-    pub range: Range,
 }
-impl Production for Case {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Case {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}:{}\n",
-            self.case_type.string(0).indent(n),
+            self.case_type.to_string(source, 0).indent(n),
             match &self.body.statements.len() {
                 0 => unreachable!("Empty bodies aren't allowed during parsing"),
-                1 => " ".to_string() + self.body.string(n + 1).trim(),
-                _ => format!("\n{}", self.body.string(n + 1)),
+                1 => " ".to_string() + self.body.to_string(source, n + 1).trim(),
+                _ => format!("\n{}", self.body.to_string(source, n + 1)),
             }
         )
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct FnCall {
     pub id: Token,
     pub args: Vec<Expression>,
-    pub range: Range,
     pub signature: FnSignature,
 }
-impl Production for FnCall {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for FnCall {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}({}",
-            self.id,
+            self.id.str_from_source(source),
             match &self
                 .args
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -763,7 +653,7 @@ impl Production for FnCall {
                         "{})",
                         self.args
                             .iter()
-                            .map(|arg| arg.string(n))
+                            .map(|arg| arg.to_string(source, n))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -775,7 +665,7 @@ impl Production for FnCall {
                             "\n{}",
                             self.args
                                 .iter()
-                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .map(|arg| arg.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -787,44 +677,34 @@ impl Production for FnCall {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Callable {
     Fn(FnCall),
     Method(GroupAccess<MethodAccess>),
 }
-impl Production for Callable {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for Callable {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Fn(call) => call.range(),
-            Self::Method(method) => method.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Fn(call) => call.string(n),
-            Self::Method(method) => method.string(n),
+            Self::Fn(call) => call.to_string(source, n),
+            Self::Method(method) => method.to_string(source, n),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct GroupInit {
     pub id: Token,
     pub args: Vec<Expression>,
-    pub range: Range,
 }
-impl Production for GroupInit {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for GroupInit {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}({}",
-            self.id,
+            self.id.str_from_source(source),
             match &self
                 .args
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -834,7 +714,7 @@ impl Production for GroupInit {
                         "{})",
                         self.args
                             .iter()
-                            .map(|arg| arg.string(n))
+                            .map(|arg| arg.to_string(source, n))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -846,7 +726,7 @@ impl Production for GroupInit {
                             "\n{}",
                             self.args
                                 .iter()
-                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .map(|arg| arg.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -857,24 +737,20 @@ impl Production for GroupInit {
         )
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Pipeline {
     pub first: Box<Identifier>,
     pub rest: Vec<Callable>,
-    pub range: Range,
 }
-impl Production for Pipeline {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for Pipeline {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}{}",
-            self.first.string(n),
+            self.first.to_string(source, n),
             match &self
                 .rest
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -885,7 +761,7 @@ impl Production for Pipeline {
                     " | {}",
                     self.rest
                         .iter()
-                        .map(|v| v.string(n))
+                        .map(|v| v.to_string(source, n))
                         .collect::<Vec<_>>()
                         .join(" | "),
                 ),
@@ -893,7 +769,7 @@ impl Production for Pipeline {
                     "\n{}",
                     self.rest
                         .iter()
-                        .map(|v| format!("| {}", v.string(n)).indent(n))
+                        .map(|v| format!("| {}", v.to_string(source, n)).indent(n))
                         .collect::<Vec<_>>()
                         .join("\n"),
                 ),
@@ -942,41 +818,33 @@ impl Production for Pipeline {
     // }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct ReturnStatement {
     pub expr: Expression,
-    pub range: Range,
 }
-impl Production for ReturnStatement {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        format!("wetuwn {}~", self.expr.string(n))
+impl<'a> Production<'a> for ReturnStatement {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        format!("wetuwn {}~", self.expr.to_string(source, n))
     }
 }
 
 /*
  * EXPRESSION UNITS
  */
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct IndexedId {
     pub id: Indexable,
     pub indices: Vec<Expression>,
-    pub range: Range,
 }
-impl Production for IndexedId {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for IndexedId {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "{}[{}",
-            self.id.string(n),
+            self.id.to_string(source, n),
             match &self
                 .indices
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -985,7 +853,7 @@ impl Production for IndexedId {
                     "{}]",
                     self.indices
                         .iter()
-                        .map(|idx| idx.string(n))
+                        .map(|idx| idx.to_string(source, n))
                         .collect::<Vec<_>>()
                         .join(", "),
                 ),
@@ -996,7 +864,7 @@ impl Production for IndexedId {
                             "\n{}",
                             self.indices
                                 .iter()
-                                .map(|arg| arg.string(n + 1).indent(n + 1) + ",")
+                                .map(|arg| arg.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -1008,22 +876,16 @@ impl Production for IndexedId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum AccessType {
     Field(GroupAccess<FieldAccess>),
     Method(GroupAccess<MethodAccess>),
 }
-impl Production for AccessType {
-    fn range(&self) -> Range {
+impl<'a> Production<'a> for AccessType {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self {
-            Self::Method(method) => method.range(),
-            Self::Field(field) => field.range(),
-        }
-    }
-    fn string(&self, n: usize) -> String {
-        match self {
-            Self::Method(method) => method.string(n),
-            Self::Field(field) => field.string(n),
+            Self::Method(method) => method.to_string(source, n),
+            Self::Field(field) => field.to_string(source, n),
         }
     }
 }
@@ -1031,22 +893,18 @@ impl Production for AccessType {
 /*
  * COLLETION LITERALS
  */
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct ArrayLiteral {
     pub exprs: Vec<Expression>,
-    pub range: Range,
 }
-impl Production for ArrayLiteral {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for ArrayLiteral {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "[{}",
             match &self
                 .exprs
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -1056,7 +914,7 @@ impl Production for ArrayLiteral {
                         "{}]",
                         self.exprs
                             .iter()
-                            .map(|expr| expr.string(n))
+                            .map(|expr| expr.to_string(source, n))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -1068,7 +926,7 @@ impl Production for ArrayLiteral {
                             "\n{}",
                             self.exprs
                                 .iter()
-                                .map(|expr| expr.string(n + 1).indent(n + 1) + ",")
+                                .map(|expr| expr.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -1080,22 +938,18 @@ impl Production for ArrayLiteral {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct SetLiteral {
     pub exprs: Vec<Expression>,
-    pub range: Range,
 }
-impl Production for SetLiteral {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for SetLiteral {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "#[{}",
             match &self
                 .exprs
                 .iter()
-                .map(|v| v.string(0))
+                .map(|v| v.to_string(source, 0))
                 .collect::<Vec<_>>()
                 .join("")
                 .len()
@@ -1105,7 +959,7 @@ impl Production for SetLiteral {
                         "{}]",
                         self.exprs
                             .iter()
-                            .map(|expr| expr.string(n))
+                            .map(|expr| expr.to_string(source, n))
                             .collect::<Vec<_>>()
                             .join(", "),
                     )
@@ -1117,7 +971,7 @@ impl Production for SetLiteral {
                             "\n{}",
                             self.exprs
                                 .iter()
-                                .map(|expr| expr.string(n + 1).indent(n + 1) + ",")
+                                .map(|expr| expr.to_string(source, n + 1).indent(n + 1) + ",")
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),
@@ -1129,16 +983,12 @@ impl Production for SetLiteral {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct MapLiteral {
     pub exprs: Vec<(Expression, Expression)>,
-    pub range: Range,
 }
-impl Production for MapLiteral {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for MapLiteral {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         format!(
             "#[{}",
             if self.exprs.len() == 0 {
@@ -1147,7 +997,7 @@ impl Production for MapLiteral {
                 match &self
                     .exprs
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k.string(n), v.string(n)))
+                    .map(|(k, v)| format!("{}: {}", k.to_string(source, n), v.to_string(source, n)))
                     .collect::<Vec<_>>()
                     .join("")
                     .len()
@@ -1157,7 +1007,11 @@ impl Production for MapLiteral {
                             "{}]",
                             self.exprs
                                 .iter()
-                                .map(|(k, v)| format!("{}: {}", k.string(n), v.string(n)))
+                                .map(|(k, v)| format!(
+                                    "{}: {}",
+                                    k.to_string(source, n),
+                                    v.to_string(source, n)
+                                ))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         )
@@ -1171,8 +1025,8 @@ impl Production for MapLiteral {
                                     .iter()
                                     .map(|(k, v)| format!(
                                         "{}: {}",
-                                        k.string(n + 1),
-                                        v.string(n + 1)
+                                        k.to_string(source, n + 1),
+                                        v.to_string(source, n + 1)
                                     )
                                     .indent(n + 1)
                                         + ",")
@@ -1191,95 +1045,87 @@ impl Production for MapLiteral {
 /*
  * EXPRESSIONS WITH OPERATORS
  */
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct PrefixExpression {
     pub op: Token,
     pub right: Box<Expression>,
-    pub range: Range,
 }
-impl Production for PrefixExpression {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a> Production<'a> for PrefixExpression {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match &self.op.kind {
-            TokenKind::Dash => format!("{}{}", self.op, self.right.string(n)),
-            _ => format!("{} {}", self.op, self.right.string(n)),
+            TokenKind::Dash => format!(
+                "{}{}",
+                self.op.str_from_source(source),
+                self.right.to_string(source, n)
+            ),
+            _ => format!(
+                "{} {}",
+                self.op.str_from_source(source),
+                self.right.to_string(source, n)
+            ),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct InfixExpression {
     pub left: Box<Expression>,
     pub op: Token,
     pub right: Box<Expression>,
-    pub range: Range,
 }
-impl Production for InfixExpression {
-    fn range(&self) -> Range {
-        self.range
-    }
+impl<'a> Production<'a> for InfixExpression {
     /// TODO: use better logic than this rudimentary implementation
     /// it currenly indents way too much if combined LR exceeds [MAX_LINE_LENGTH] chars
-    fn string(&self, n: usize) -> String {
-        match self.left.string(0).len() + self.right.string(0).len() {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        match self.left.to_string(source, 0).len() + self.right.to_string(source, 0).len() {
             0..=MAX_LINE_LENGTH => {
                 format!(
                     "({} {} {})",
-                    self.left.string(n),
-                    self.op,
-                    self.right.string(n)
+                    self.left.to_string(source, n),
+                    self.op.str_from_source(source),
+                    self.right.to_string(source, n)
                 )
             }
             _ => {
                 format!(
                     "{}\n{} {}",
-                    self.left.string(n),
-                    self.op.string(n + 1).indent(n + 1),
-                    self.right.string(n + 1)
+                    self.left.to_string(source, n),
+                    self.op.to_string(source, n + 1).indent(n + 1),
+                    self.right.to_string(source, n + 1)
                 )
             }
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct GroupedExpression {
     pub expr: Box<Expression>,
-    pub range: Range,
 }
-impl Production for GroupedExpression {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
-        match &self.expr.string(0).len() {
+impl<'a> Production<'a> for GroupedExpression {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
+        match &self.expr.to_string(source, 0).len() {
             0..=MAX_LINE_LENGTH => {
-                format!("{}", self.expr.string(n))
+                format!("{}", self.expr.to_string(source, n))
             }
             _ => {
-                format!("\n{}\n", self.expr.string(n + 1).indent(n + 1))
+                format!("\n{}\n", self.expr.to_string(source, n + 1).indent(n + 1))
             }
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct FieldAccess;
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct MethodAccess;
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct GroupAccess<AccessType> {
     pub accessed: Vec<Accessor>,
     pub access_type: std::marker::PhantomData<AccessType>,
-    pub range: Range,
 }
-impl<T> Production for GroupAccess<T> {
-    fn range(&self) -> Range {
-        self.range
-    }
-    fn string(&self, n: usize) -> String {
+impl<'a, T> Production<'a> for GroupAccess<T> {
+    fn to_string(&self, source: &'a str, n: usize) -> String {
         match self.accessed.len() {
             0..=1 => unreachable!(),
             _ => {
@@ -1287,10 +1133,10 @@ impl<T> Production for GroupAccess<T> {
                 let rest = self.accessed.iter().skip(1).collect::<Vec<_>>();
                 format!(
                     "{}{}",
-                    first.string(n),
+                    first.to_string(source, n),
                     match &rest
                         .iter()
-                        .map(|v| v.string(0))
+                        .map(|v| v.to_string(source, 0))
                         .collect::<Vec<_>>()
                         .join("")
                         .len()
@@ -1299,14 +1145,14 @@ impl<T> Production for GroupAccess<T> {
                         1..=MAX_LINE_LENGTH => format!(
                             ".{}",
                             rest.iter()
-                                .map(|v| v.string(0))
+                                .map(|v| v.to_string(source, 0))
                                 .collect::<Vec<_>>()
                                 .join("."),
                         ),
                         _ => format!(
                             "\n{}",
                             rest.iter()
-                                .map(|v| format!(".{}", v.string(n)).indent(n))
+                                .map(|v| format!(".{}", v.to_string(source, n)).indent(n))
                                 .collect::<Vec<_>>()
                                 .join("\n"),
                         ),

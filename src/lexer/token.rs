@@ -1,5 +1,6 @@
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::ops::Range;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TokenKind {
@@ -313,35 +314,56 @@ impl TokenKind {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Token {
     pub kind: TokenKind,
-    pub text: &'static str,
-    pub pos: (usize, usize),
-    pub end_pos: (usize, usize),
-    pub range: (usize, usize),
+    pub pos: TokenPosition,
 }
-impl Eq for Token {}
-impl PartialEq for Token {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.text == other.text
+
+// impl Eq for Token {}
+// impl PartialEq for Token {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.kind == other.kind && self.text == other.text
+//     }
+// }
+// impl Hash for Token {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         self.kind.hash(state);
+//         self.text.hash(state);
+//     }
+// }
+impl<'a> Token {
+    fn default() -> Self {
+        Self {
+            kind: TokenKind::EOF,
+            pos: TokenPosition::zero(),
+        }
     }
-}
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.text)
+    fn new(kind: TokenKind, pos: TokenPosition) -> Self {
+        Self { kind, pos }
     }
-}
-impl Hash for Token {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.kind.hash(state);
-        self.text.hash(state);
+    /// Gets the token text from a given source.
+    /// A [Token] only contains its position (and kind) and does not store its representation
+    /// # Example
+    /// ```
+    /// let source = "hello world";
+    /// let tok = Token::new(
+    ///     TokenKind::Identifier,
+    ///     TokenPosition::new((0, 5), 0, 0),
+    /// );
+    /// assert_eq!("hello", tok.str_from_source(source));
+    /// ```
+    pub fn str_from_source(&self, source: &'a str) -> &'a str {
+        &source[self.pos.offset.range()]
     }
-}
-impl Token {
-    pub fn from(
-        text: &'static str,
-        pos: (usize, usize),
-        end_pos: (usize, usize),
-        range: (usize, usize),
-    ) -> Self {
+    /// Attempts to create a token based on the str passed to it and returns a [Token]
+    /// Returns default token with kind [TokenKind::EOF] as error if it cannot recognize the str
+    /// # Examples
+    /// ```
+    /// let tok = Token::from_str("chan", TokenPosition::zero());
+    /// assert_eq!(tok, Ok(Token::new(TokenKind::Chan, TokenPosition::zero()));
+    ///
+    /// let unknown = Token::from_str("@", TokenPosition::zero());
+    /// assert_eq!(tok, Err(Token::default()));
+    /// ```
+    pub fn from_str(text: &str, pos: TokenPosition) -> Result<Self, Self> {
         let kind = match text {
             "chan" => TokenKind::Chan,
             "kun" => TokenKind::Kun,
@@ -421,14 +443,133 @@ impl Token {
             _ if text.chars().all(|c| c.is_ascii_digit() || c == '_') => TokenKind::IntLiteral,
             _ if text.starts_with(|c: char| c.is_ascii_digit()) => TokenKind::FloatLiteral,
             _ if text.starts_with(">_<") => TokenKind::Comment,
-            _ => unreachable!("Unknown token: {}", text),
+            _ => return Err(Token::default()),
         };
-        Token {
-            kind,
-            text: text.into(),
-            pos,
-            end_pos,
-            range,
+        Ok(Token { pos, kind })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+/// like [LexerPosition] but has an [Offset] to track where the token is in the buffer
+pub struct TokenPosition {
+    pub offset: Offset,
+    pub line: usize,
+    pub col: usize,
+}
+impl fmt::Display for TokenPosition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})[{:?}]", self.line, self.col, self.offset)
+    }
+}
+impl TokenPosition {
+    pub fn new(abs: (usize, usize), line: usize, col: usize) -> Self {
+        Self {
+            offset: Offset::new(abs.0, abs.1),
+            line,
+            col,
         }
+    }
+    pub fn new_with_offset(offset: Offset, line: usize, col: usize) -> Self {
+        Self { offset, line, col }
+    }
+    pub fn zero() -> Self {
+        Self {
+            offset: Offset::zero(),
+            line: 0,
+            col: 0,
+        }
+    }
+    /// Gets the ending column based on [Offset::len]
+    /// # Example
+    /// ```
+    /// let offset = Offset::new(0, 4);
+    /// let pos =  TokenPosition::new_with_offset(offset, 0, 0);
+    /// // or just TokenPosition::new((0, 4), 0, 0);
+    ///
+    /// assert_eq!(pos.col_end(), 3);
+    /// ```
+    pub fn col_end(&self) -> usize {
+        self.col + self.offset.len() - 1
+    }
+    /// Returns the line information for buffers (1-indexed)
+    /// # Example
+    /// ```
+    /// let pos =  TokenPosition::new((0, 0), 0, 0);
+    /// assert_eq!(pos.line, 0);
+    /// assert_eq!(pos.buffer_line(), 1);
+    /// ```
+    pub fn buffer_line(&self) -> usize {
+        self.line + 1
+    }
+    /// Returns the column information for buffers (1-indexed)
+    /// # Example
+    /// ```
+    /// let pos =  TokenPosition::new((0, 0), 0, 0);
+    /// assert_eq!(pos.col, 0);
+    /// assert_eq!(pos.buffer_col(), 1);
+    /// ```
+    pub fn buffer_col(&self) -> usize {
+        self.col + 1
+    }
+    /// Returns the column end information for buffers (1-indexed)
+    /// # Example
+    /// ```
+    /// let pos =  TokenPosition::new((0, 3), 0, 0);
+    /// assert_eq!(pos.col_end(), 2);
+    /// assert_eq!(pos.buffer_line(), 3);
+    /// ```
+    pub fn buffer_col_end(&self) -> usize {
+        self.col_end() + 1
+    }
+}
+
+/// Represents the start and exclusive end range of a token within a buffer.
+/// Used for tracking token positions within text or data.
+/// # Examples
+/// ```
+/// let offset = Offset::new(0, 4);
+/// assert_eq!(offset.len(), 4);
+/// assert_eq!(offset.range(), 0..4);
+///
+/// let string = "aqua-chan";
+/// assert_eq!(&string[offset.range()], "aqua");
+/// ```
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
+pub struct Offset {
+    pub start: usize,
+    pub end: usize,
+}
+impl fmt::Display for Offset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}-{})", self.start, self.end)
+    }
+}
+impl Offset {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+    pub fn zero() -> Self {
+        Self { start: 0, end: 0 }
+    }
+    /// length of the beginning of the offset to the end
+    /// # Example
+    /// ```
+    /// let offset = Offset::new(0, 4);
+    /// assert_eq!(offset.len(), 4);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+    /// Construct an end exclusive range from [Offset::start] to [Offset::end]
+    /// # Examples
+    /// ```
+    /// let offset = Offset::new(0, 4);
+    /// assert_eq!(offset.range(), 0..4);
+    ///
+    /// let string = "aqua-chan";
+    /// assert_eq!(&string[offset.range()], "aqua");
+    /// ```
+    pub fn range(&self) -> Range<usize> {
+        self.start..self.end
     }
 }

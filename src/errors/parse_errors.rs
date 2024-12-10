@@ -50,17 +50,17 @@ impl BodyType {
         }
     }
 }
-pub struct EmptyBodyError {
+pub struct EmptyBodyError<'a> {
     expected: Vec<TokenKind>,
     body_type: BodyType,
-    line_text: &'static str,
+    line_text: &'a str,
     r_bracket_pos: (usize, usize),
 }
-impl EmptyBodyError {
+impl<'a> EmptyBodyError<'a> {
     pub fn new(
         expected: Vec<TokenKind>,
         body_type: BodyType,
-        line_text: &'static str,
+        line_text: &'a str,
         r_bracket_pos: (usize, usize),
     ) -> Self {
         Self {
@@ -71,7 +71,7 @@ impl EmptyBodyError {
         }
     }
 }
-impl CompilerError for EmptyBodyError {
+impl CompilerError for EmptyBodyError<'_> {
     fn message(&self) -> String {
         let mut msg = String::new();
         // header
@@ -151,19 +151,19 @@ impl CompilerError for EmptyBodyError {
     }
 }
 
-pub struct NoMainError {
-    line_text: &'static str,
+pub struct NoMainError<'a> {
+    line_text: &'a str,
     end_pos: (usize, usize),
 }
-impl NoMainError {
-    pub fn new(line_text: &'static str, end_pos: (usize, usize)) -> Self {
+impl<'a> NoMainError<'a> {
+    pub fn new(line_text: &'a str, end_pos: (usize, usize)) -> Self {
         Self {
             line_text,
             end_pos: (end_pos.0 + 1, end_pos.1 + 1),
         }
     }
 }
-impl CompilerError for NoMainError {
+impl CompilerError for NoMainError<'_> {
     fn message(&self) -> String {
         let mut msg = String::new();
         // header
@@ -219,13 +219,13 @@ impl CompilerError for NoMainError {
     }
 }
 
-pub struct NonCallableInPipelineError {
-    line_texts: Vec<&'static str>,
+pub struct NonCallableInPipelineError<'a> {
+    line_texts: Vec<&'a str>,
     id: Identifier,
-    last_type: &'static str,
+    last_type: &'a str,
 }
-impl NonCallableInPipelineError {
-    pub fn new(line_texts: Vec<&'static str>, id: Identifier) -> Self {
+impl<'a> NonCallableInPipelineError<'a> {
+    pub fn new(line_texts: Vec<&'a str>, id: Identifier) -> Self {
         Self {
             line_texts,
             id: id.clone(),
@@ -249,7 +249,7 @@ impl NonCallableInPipelineError {
         }
     }
 }
-impl CompilerError for NonCallableInPipelineError {
+impl CompilerError for NonCallableInPipelineError<'_> {
     fn message(&self) -> String {
         let mut msg = String::new();
         // header
@@ -269,7 +269,7 @@ impl CompilerError for NonCallableInPipelineError {
         msg.push_str(
             format!(
                 "{} {}\n",
-                self.id.string(0).bold().underline(),
+                self.id.to_string(0).bold().underline(),
                 "is not callable so it's not allowed in pipeline expressions".italic()
             )
             .as_str(),
@@ -300,8 +300,10 @@ impl CompilerError for NonCallableInPipelineError {
                                 true => format!(
                                     "\n{}{}{} {} {}",
                                     format!("{: >width$} | ", "", width = line_no.len()).blue(),
-                                    " ".repeat(self.id.range().end.1 - self.id.string(0).len() + 1),
-                                    "^".repeat(self.id.string(0).len()).red(),
+                                    " ".repeat(
+                                        self.id.range().end.1 - self.id.to_string(0).len() + 1
+                                    ),
+                                    "^".repeat(self.id.to_string(0).len()).red(),
                                     "unexpected".red(),
                                     self.last_type.red()
                                 ),
@@ -318,16 +320,16 @@ impl CompilerError for NonCallableInPipelineError {
     }
 }
 
-pub struct ParamAfterVariadicParamError {
-    variadic_line_text: &'static str,
-    extra_line_text: &'static str,
+pub struct ParamAfterVariadicParamError<'a> {
+    variadic_line_text: &'a str,
+    extra_line_text: &'a str,
     variadic: Param,
     extra: Param,
 }
-impl ParamAfterVariadicParamError {
+impl<'a> ParamAfterVariadicParamError<'a> {
     pub fn new(
-        variadic_line_text: &'static str,
-        extra_line_text: &'static str,
+        variadic_line_text: &'a str,
+        extra_line_text: &'a str,
         variadic: Param,
         extra: Param,
     ) -> Self {
@@ -348,8 +350,8 @@ impl ParamAfterVariadicParamError {
             format!(
                 "{}\n",
                 line_text.replace(
-                    param.string(0).as_str(),
-                    param.string(0).red().strikethrough().as_str()
+                    param.to_string(0).as_str(),
+                    param.to_string(0).red().strikethrough().as_str()
                 )
             )
             .as_str(),
@@ -368,7 +370,7 @@ impl ParamAfterVariadicParamError {
         msg
     }
 }
-impl CompilerError for ParamAfterVariadicParamError {
+impl CompilerError for ParamAfterVariadicParamError<'_> {
     fn message(&self) -> String {
         let mut msg = String::new();
         msg.push_str(
@@ -399,8 +401,8 @@ impl CompilerError for ParamAfterVariadicParamError {
         msg.push_str(
             format!(
                 "'{}' appeared after '{}'\n",
-                self.extra.string(0),
-                self.variadic.string(0),
+                self.extra.to_string(0),
+                self.variadic.to_string(0),
             )
             .italic()
             .as_str(),
@@ -426,8 +428,8 @@ impl CompilerError for ParamAfterVariadicParamError {
                 "remove the variadic parameter",
                 &self.variadic,
                 self.variadic_line_text.replace(
-                    self.variadic.string(0).as_str(),
-                    self.variadic.string(0).red().as_str(),
+                    self.variadic.to_string(0).as_str(),
+                    self.variadic.to_string(0).red().as_str(),
                 ),
             )
             .as_str(),
@@ -438,8 +440,8 @@ impl CompilerError for ParamAfterVariadicParamError {
                 "remove the extra parameter",
                 &self.extra,
                 self.extra_line_text.replace(
-                    self.extra.string(0).as_str(),
-                    self.extra.string(0).red().as_str(),
+                    self.extra.to_string(0).as_str(),
+                    self.extra.to_string(0).red().as_str(),
                 ),
             )
             .as_str(),
@@ -447,8 +449,12 @@ impl CompilerError for ParamAfterVariadicParamError {
         // preview changing extra to variadic to normal param
         let line_no = self.variadic.range.start.0.to_string();
         let line_text = self.variadic_line_text.replace(
-            self.variadic.string(0).as_str(),
-            self.variadic.string(0).replace("...", "").green().as_str(),
+            self.variadic.to_string(0).as_str(),
+            self.variadic
+                .to_string(0)
+                .replace("...", "")
+                .green()
+                .as_str(),
         );
         let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
         msg.push_str(side_border.as_str());
@@ -456,8 +462,8 @@ impl CompilerError for ParamAfterVariadicParamError {
             format!(
                 "{}\n",
                 line_text.replace(
-                    self.variadic.string(0).as_str(),
-                    self.variadic.string(0).red().as_str()
+                    self.variadic.to_string(0).as_str(),
+                    self.variadic.to_string(0).red().as_str()
                 )
             )
             .as_str(),
@@ -471,7 +477,7 @@ impl CompilerError for ParamAfterVariadicParamError {
                     .green(),
                 format!(
                     "turn '{}' into a non variadic parameter",
-                    self.variadic.string(0)
+                    self.variadic.to_string(0)
                 )
                 .green(),
             )
@@ -481,22 +487,22 @@ impl CompilerError for ParamAfterVariadicParamError {
     }
 }
 
-pub struct UnexpectedTokenError {
+pub struct UnexpectedTokenError<'a> {
     actual: Token,
     expected: Vec<TokenKind>,
-    header: Option<&'static str>,
-    context: Option<&'static str>,
-    line_text: &'static str,
+    header: Option<&'a str>,
+    context: Option<&'a str>,
+    line_text: &'a str,
     pos: (usize, usize),
     end_pos: (usize, usize),
 }
-impl UnexpectedTokenError {
+impl<'a> UnexpectedTokenError<'a> {
     pub fn new(
         actual: Token,
         expected: Vec<TokenKind>,
-        header: Option<&'static str>,
-        context: Option<&'static str>,
-        line_text: &'static str,
+        header: Option<&'a str>,
+        context: Option<&'a str>,
+        line_text: &'a str,
         pos: (usize, usize),
         end_pos: (usize, usize),
     ) -> Self {
@@ -511,7 +517,7 @@ impl UnexpectedTokenError {
         }
     }
 }
-impl CompilerError for UnexpectedTokenError {
+impl CompilerError for UnexpectedTokenError<'_> {
     fn message(&self) -> String {
         let mut msg = String::new();
         // header
