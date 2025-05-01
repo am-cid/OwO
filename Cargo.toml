@@ -2,3 +2,7 @@
 name = "OwO"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+multipeek = "0.1.2"
+regex-lite = "0.1.6"
