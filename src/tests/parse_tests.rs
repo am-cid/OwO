@@ -11,7 +11,7 @@ fun main-san() {
     pwint("hello world")~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -29,7 +29,7 @@ fun Hololive hello-san() {
     pwint("hello world")~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -60,7 +60,7 @@ fun main-san() {
     aqua.scream().pitch = 9~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -95,7 +95,7 @@ fun Sample! mutable_method-san(other-chan) {
     uwu.property += other~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -125,7 +125,7 @@ fun main-san() {
     aqua.scream().pitch = [[1, 2, 3], [1.0, 2.0, 3.0], [fax, cap, fax]]~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -155,7 +155,7 @@ fun main-san() {
     aqua.scream().pitch = [#[1, 2, 3], #[1.0, 2.0, 3.0], #[fax, cap, fax]]~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -180,14 +180,14 @@ fun main-san() {
     aqua.scream().pitch = [#[any: [#[1, 2, 3], #[4, 5, 6]]]]~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
 #[test]
 fn group_and_contract_definition() {
     let source = r#"fun main-san(){pwint()~}
-    gwoup HololiveMember[]{name-senpai~age-kun~manager-senpai~}
+    gwoup HololiveMember{name-senpai~age-kun~manager-senpai~}
     contwact Idol{sing-senpai(chan, kun,)~dance-senpai(kouhai, sama,)~}"#;
     let formatted = r#"
 fun main-san() {
@@ -203,35 +203,7 @@ contwact Idol {
     dance-senpai(kouhai, sama)~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
-    assert_already_formatted(formatted);
-}
-
-#[test]
-fn group_contract_implementations() {
-    let source = r#"fun main-san() {pwint()~}gwoup Empty[]{id-chan~}gwoup HololiveMember[Idol,Streamer,]{name-senpai~age-kun~manager-senpai~}contwact Idol {sing-senpai(chan, kun,)~dance-senpai(kouhai, sama,)~}contwact Streamer{go_live-sama()~farm_clips-senpai(chan,senpai,)~}"#;
-    let formatted = r#"
-fun main-san() {
-    pwint()~
-}
-gwoup Empty {
-    id-chan~
-}
-gwoup HololiveMember [Idol, Streamer] {
-    name-senpai~
-    age-kun~
-    manager-senpai~
-}
-contwact Idol {
-    sing-senpai(chan, kun)~
-    dance-senpai(kouhai, sama)~
-}
-contwact Streamer {
-    go_live-sama()~
-    farm_clips-senpai(chan, senpai)~
-}"#
-    .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -243,7 +215,7 @@ fun main-san() {
     hi aqua-chan = 1+2-3~
     aqua = 5-6*7~
     aqua = 8*(9+1)/2~
-    aqua = -3^4+5*-6~
+    aqua = -3*4+5*-6~
 
     >_< rel ops
     hi ojou-dono = 1>2<3~
@@ -259,28 +231,28 @@ fun main-san() {
     shion = not 5 and 6 or 7~
 
     >_< all combined ops
-    hi lap-sama = -1+-2>=-3^4==5 or 6 and not 7~
+    hi lap-sama = -1+-2>=-3*4==5 or 6 and not 7~
 }"#
     .trim();
     let formatted = r#"
 fun main-san() {
-    hi aqua-chan = ((1 + 2) - 3)~
-    aqua = (5 - (6 * 7))~
-    aqua = ((8 * (9 + 1)) / 2)~
-    aqua = (-(3 ^ 4) + (5 * -6))~
-    hi ojou-dono = ((1 > 2) < 3)~
-    ojou = ((4 >= 5) <= 6)~
-    ojou = ((7 == 8) != 9)~
-    hi shion-sama = ((1 or 2) or 3)~
-    shion = (4 or (5 and 6))~
-    shion = ((7 and 8) or 9)~
-    shion = ((1 and 2) and 3)~
-    shion = ((1 and 2) or (3 and 4))~
-    shion = ((not 5 and 6) or 7)~
-    hi lap-sama = ((((-1 + -2) >= -(3 ^ 4)) == 5) or (6 and not 7))~
+    hi aqua-chan = 1 + 2 - 3~
+    aqua = 5 - 6 * 7~
+    aqua = 8 * (9 + 1) / 2~
+    aqua = -3 * 4 + 5 * -6~
+    hi ojou-dono = 1 > 2 < 3~
+    ojou = 4 >= 5 <= 6~
+    ojou = 7 == 8 != 9~
+    hi shion-sama = 1 or 2 or 3~
+    shion = 4 or 5 and 6~
+    shion = 7 and 8 or 9~
+    shion = 1 and 2 and 3~
+    shion = 1 and 2 or 3 and 4~
+    shion = not 5 and 6 or 7~
+    hi lap-sama = -1 + -2 >= -3 * 4 == 5 or 6 and not 7~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted)
+    assert_formatted_eq(source.to_string(), formatted)
 }
 
 #[test]
@@ -330,7 +302,7 @@ fun Class! long_method-san(
     pwint()~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -365,7 +337,7 @@ fun main-san() {
     }
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -399,7 +371,7 @@ fun main-san() {
     }
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -416,15 +388,15 @@ fun main-san() {
 }"#;
     let formatted = r#"
 fun main-san() {
-    fow hi i-chan! = 1~ (i <= 3)~ (i + 1) {
+    fow hi i-chan! = 1~ i <= 3~ i + 1 {
         pwint()~
     }
-    fow hi a-senpai! = ""~ (a == "owo")~ inpwt("input owo: ") {
+    fow hi a-senpai! = ""~ a == "owo"~ inpwt("input owo: ") {
         pwint()~
     }
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
@@ -439,39 +411,78 @@ fun main-san() {
     }
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
 #[test]
 fn function_pipelines() {
     let source = r#"
-fun main-san() {aqua|pow(4)|pwint()~totally_random_vec_of_nums()|filter_evens()|sort_ascending()
-|pwint("placeholder so the pipeline becomes long enough")~}"#;
+fun main - san() { "hewwo world~".chars().unique()[ 3].to_int()-10*7/3 |pow(4) 
+|pwint()~[1,2,3,4,5, 6, 7,8, 9] |filter_evens()|sort_ascending()|
+    pwint("placeholder so the pipeline becomes long enough")~
+[1, 2, 3, 4, 5][1].abs() + 9 * 8 / 6 - 5 | (1 + 2 * 3).pow() | pwint(4)~
+hi aqua-chan = "konaqua~".upper() | shuffle_string() | md5hash()~
+shion = "eeeehhh?"[1].to_int()|average([5, 2, 5, 7, 2, 2].unique().sum(),
+"random long string".chars() | charlist_to_int() | list_sum(),)
+|Namespace().method('o',[90.3,62.5],arg3)|(4/5-6*7 + 8).max(10,20)~
+ojou = (Namespace(args, extra_arg).field|Namespace().add()).field~}"#;
     let formatted = r#"
 fun main-san() {
-    aqua | pow(4) | pwint()~
-    totally_random_vec_of_nums()
+    "hewwo world~".chars().unique()[3].to_int() - 10 * 7 / 3 | pow(4) | pwint()~
+    [1, 2, 3, 4, 5, 6, 7, 8, 9]
     | filter_evens()
     | sort_ascending()
     | pwint("placeholder so the pipeline becomes long enough")~
+    [1, 2, 3, 4, 5][1].abs() + 9 * 8 / 6 - 5 | (1 + 2 * 3).pow() | pwint(4)~
+    hi aqua-chan = "konaqua~".upper() | shuffle_string() | md5hash()~
+    shion = "eeeehhh?"[1].to_int()
+        | average(
+            [5, 2, 5, 7, 2, 2].unique().sum(),
+            "random long string".chars() | charlist_to_int() | list_sum(),
+        )
+        | Namespace().method('o', [90.3, 62.5], arg3)
+        | (4 / 5 - 6 * 7 + 8).max(10, 20)~
+    ojou = (Namespace(args, extra_arg).field | Namespace().add()).field~
 }"#
     .trim();
-    assert_formatted_eq(source, formatted);
+    assert_formatted_eq(source.to_string().to_string(), formatted);
+    assert_already_formatted(formatted);
+}
+
+#[test]
+fn literals_accessing_methods_and_fields() {
+    let source = r#"
+fun main - san (){1.abs()|2.max()~1.5.round()|2.5.round().max()~fax.or_(cap)|
+cap.and_()~cap . and_()| fax.or_(cap)~"string". chars() |
+"this is a ".extend()~'1'.to_int()|'2'.to_string
+().nth().unwrap()~Namespace(args,extra_arg).field|Namespace().add()~}"#;
+    let formatted = r#"
+fun main-san() {
+    1.abs() | 2.max()~
+    1.5.round() | 2.5.round().max()~
+    fax.or_(cap) | cap.and_()~
+    cap.and_() | fax.or_(cap)~
+    "string".chars() | "this is a ".extend()~
+    '1'.to_int() | '2'.to_string().nth().unwrap()~
+    Namespace(args, extra_arg).field | Namespace().add()~
+}"#
+    .trim();
+    assert_formatted_eq(source.to_string().to_string(), formatted);
     assert_already_formatted(formatted);
 }
 
 /// asserts that passed in formatted source is equal to how the parser formats it
 fn assert_already_formatted(formatted: &'static str) -> () {
-    assert_formatted_eq(formatted, formatted)
+    assert_formatted_eq(formatted.to_string(), formatted)
 }
 /// asserts that source, which will be formatted by parser, is equal to the passed in formatted
 /// string
-fn assert_formatted_eq(source: &'static str, formatted: &'static str) -> () {
-    let mut lexer = Lexer::new(source);
-    lexer.tokenize();
+fn assert_formatted_eq(source: String, formatted: &'static str) -> () {
+    let lexer = Lexer::new(source);
     let mut parser = Parser::new(
-        source,
+        &lexer.source,
+        &lexer.line_starts,
         lexer
             .tokens
             .into_iter()
@@ -489,9 +500,9 @@ fn assert_formatted_eq(source: &'static str, formatted: &'static str) -> () {
     let _ = parser.parse_program();
     assert_eq!(
         formatted,
-        parser.program.string(0),
+        parser.program.to_formatted_string(&lexer.source, 0),
         "expected:\n{}\n===\nactual:\n{}",
         formatted,
-        parser.program.string(0),
+        parser.program.to_formatted_string(&lexer.source, 0),
     )
 }

@@ -1,17 +1,12 @@
-use core::fmt;
-
 use crate::{
-    errors::lex_errors::CompilerError,
-    lexer::token::{Token, TokenKind},
-    parser::{
-        identifiers::{Accessor, Identifier},
-        productions::{AccessType, Param, Production},
-    },
+    errors::lex_errors::COL_WIDTH,
+    lexer::token::{Position, Token, TokenKind},
     utils::string::StringExt,
 };
+use core::fmt;
 
 #[derive(Clone, Copy)]
-pub enum BodyType {
+pub enum EmptyBodyErrorType {
     Fn,
     If,
     Mash,
@@ -21,7 +16,7 @@ pub enum BodyType {
     Group,
     Contract,
 }
-impl fmt::Display for BodyType {
+impl fmt::Display for EmptyBodyErrorType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -39,543 +34,425 @@ impl fmt::Display for BodyType {
         )
     }
 }
-impl BodyType {
+impl EmptyBodyErrorType {
     pub fn sample_statement(&self) -> &'static str {
         match self {
-            Self::Fn | Self::If | Self::Mash | Self::MashCase | Self::For | Self::Method => {
+            Self::Fn | Self::If | Self::MashCase | Self::For | Self::Method => {
                 "pwint(\"hewwo world :3\")~"
             }
+            Self::Mash => "default: pwint(\"hewwo world :3\")~",
             Self::Group => "field-chan~",
             Self::Contract => "method-chan(kun, senpai)~",
         }
     }
 }
-pub struct EmptyBodyError {
+pub struct EmptyBodyError<'a> {
+    opening_buffer_pos: (usize, usize),
+    closing_str: &'a str,
+    closing_buffer_pos: (usize, usize),
     expected: Vec<TokenKind>,
-    body_type: BodyType,
-    line_text: &'static str,
-    r_bracket_pos: (usize, usize),
+    body_type: EmptyBodyErrorType,
+    line_text: &'a str,
 }
-impl EmptyBodyError {
+impl<'a> EmptyBodyError<'a> {
     pub fn new(
+        opening_buffer_pos: (usize, usize),
+        closing_str: &'a str,
+        closing_buffer_pos: (usize, usize),
         expected: Vec<TokenKind>,
-        body_type: BodyType,
-        line_text: &'static str,
-        r_bracket_pos: (usize, usize),
+        body_type: EmptyBodyErrorType,
+        line_text: &'a str,
     ) -> Self {
         Self {
+            opening_buffer_pos,
+            closing_str,
+            closing_buffer_pos,
             expected,
             body_type,
             line_text,
-            r_bracket_pos: (r_bracket_pos.0 + 1, r_bracket_pos.1 + 1),
         }
     }
 }
-impl CompilerError for EmptyBodyError {
-    fn message(&self) -> String {
-        let mut msg = String::new();
-        // header
-        msg.push_str(format!("[EMPTY {} BODY]\n", self.body_type).red().as_str());
-        msg.push_str("uwu block statements must not be empty\n".bold().as_str());
-        msg.push_str(
-            format!(
-                "{} {}\n",
-                "Expected any in:".bold(),
-                self.expected
-                    .iter()
-                    .map(|e| format!("'{}'", e))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-                    .italic()
-            )
-            .as_str(),
+impl<'a> fmt::Display for EmptyBodyError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pipe = "|".blue();
+        let none = " ";
+        let line = self.closing_buffer_pos.0;
+        let padding = " ".repeat(
+            self.line_text
+                .chars()
+                .take_while(|c| c.is_ascii_whitespace())
+                .count(),
         );
-        // preview
-        let line_no = self.r_bracket_pos.0.to_string();
-        msg.push_str(
-            format!("{: >width$} |\n", "", width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(
+        let sample_statement = self.body_type.sample_statement();
+        let suggestion = format!(
+            ">_< try putting this statement before '{}'",
+            self.closing_str,
+        )
+        .green()
+        .italic();
+        let line_text = self.line_text;
+
+        write!(
+            f,
+            "{}",
             format!(
-                "{}{}{}\n{}{}{} {}\n",
-                format!(
-                    "{: >width$} | ",
-                    self.r_bracket_pos.0 - 1,
-                    width = line_no.len()
-                )
-                .blue(),
-                " ".repeat(
-                    self.line_text
-                        .chars()
-                        .take_while(|c| c.is_ascii_whitespace())
-                        .count()
-                        + 4
+                r#"
+{header}
+{context}
+{expected}
+{none:COL_WIDTH$} {pipe}
+{none:COL_WIDTH$} {pipe} {padding}{suggestion}
+{suggestion_text}
+"#,
+                header = format!("[EMPTY {} BODY]", self.body_type).red(),
+                context = "uwu block statements must not be empty".bold(),
+                expected = format!(
+                    "{} {}",
+                    "Expected any in:".bold(),
+                    self.expected
+                        .iter()
+                        .map(|e| format!("'{}'", e))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .italic()
                 ),
-                self.body_type.sample_statement().green(),
-                format!("{: >width$} | ", "", width = line_no.len()).blue(),
-                " ".repeat(
-                    self.line_text
-                        .chars()
-                        .take_while(|c| c.is_ascii_whitespace())
-                        .count()
-                        + 4
-                ),
-                "-".repeat(self.body_type.sample_statement().len()).green(),
-                "try putting this statement before the RBrace".green(),
+                suggestion_text = if self.opening_buffer_pos.0 == self.closing_buffer_pos.0 {
+                    format!(
+                        r#"{line:COL_WIDTH$} {pipe} {line_text_with_statement}
+{none:COL_WIDTH$} {pipe} {error_msg}"#,
+                        line_text_with_statement = format!(
+                            "{} {} {}",
+                            self.line_text
+                                .get(0..self.opening_buffer_pos.1)
+                                .unwrap_or_default(),
+                            // "",
+                            sample_statement.green(),
+                            self.line_text
+                                .get(self.closing_buffer_pos.1 - 1..)
+                                .unwrap_or_default(),
+                        ),
+                        error_msg = format!(
+                            "{}{} Expected statement, got '{}'",
+                            " ".repeat(self.closing_buffer_pos.1 + sample_statement.len()),
+                            "^".repeat(self.closing_str.len()),
+                            self.closing_str
+                        )
+                        .red()
+                        .italic()
+                    )
+                } else {
+                    format!(
+                        r#"{line_before:COL_WIDTH$} {pipe} {padding}{sample_statement}
+{line:COL_WIDTH$} {pipe} {line_text}
+{none:COL_WIDTH$} {pipe} {error_msg}"#,
+                        line_before = line - 1,
+                        sample_statement = sample_statement.green(),
+                        error_msg = format!(
+                            "{}{} Expected statement, got '{}'",
+                            " ".repeat(self.closing_buffer_pos.1 - 1),
+                            "^".repeat(self.closing_str.len()),
+                            self.closing_str
+                        )
+                        .red()
+                        .italic()
+                    )
+                }
             )
-            .as_str(),
-        );
-        msg.push_str(
-            format!("{: >width$} | ", line_no, width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(format!("{}\n", self.line_text).as_str());
-        msg.push_str(
-            format!("{: >width$} | ", "", width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(
-            format!(
-                "{}{} Expected statement, got RBrace\n",
-                " ".repeat(self.r_bracket_pos.1 - 1),
-                "^",
-            )
-            .red()
-            .as_str(),
-        );
-        msg
+            .trim()
+        )
     }
 }
 
-pub struct NoMainError {
-    line_text: &'static str,
-    end_pos: (usize, usize),
+pub struct NoMainError<'a> {
+    line_text: &'a str,
+    buffer_pos: (usize, usize),
 }
-impl NoMainError {
-    pub fn new(line_text: &'static str, end_pos: (usize, usize)) -> Self {
+impl<'a> NoMainError<'a> {
+    pub fn new(line_text: &'a str, buffer_pos: (usize, usize)) -> Self {
         Self {
             line_text,
-            end_pos: (end_pos.0 + 1, end_pos.1 + 1),
+            buffer_pos,
         }
     }
 }
-impl CompilerError for NoMainError {
-    fn message(&self) -> String {
-        let mut msg = String::new();
-        // header
-        msg.push_str("[NO MAIN FUNCTION]\n".red().as_str());
-        msg.push_str(
-            "All .uwu programs must have a main function\n"
-                .bold()
-                .as_str(),
-        );
-        // preview
-        let line_no = self.end_pos.0.to_string();
-        msg.push_str(
-            format!("{: >width$} |\n", "", width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(
-            format!("{: >width$} | ", line_no, width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(format!("{}\n", self.line_text).as_str());
-        msg.push_str(
-            format!("{: >width$} | ", "", width = line_no.len())
-                .blue()
-                .as_str(),
-        );
-        msg.push_str(
+impl<'a> fmt::Display for NoMainError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
             format!(
-                "{}{} {}\n",
-                " ".repeat(self.end_pos.1),
-                "^".red(),
-                "expected main function, found EOF".red(),
+                r#"
+{header}
+{context}
+{none:COL_WIDTH$} {pipe}
+{line:COL_WIDTH$} {pipe} {line_text}
+{none:COL_WIDTH$} {pipe} {highlight} {error_msg}
+{dots}
+{dots}
+{none:COL_WIDTH$} {pipe} {suggestion}
+{line_1:COL_WIDTH$} {pipe} {main_func_head}
+{line_2:COL_WIDTH$} {pipe} {main_func_body}
+{line_3:COL_WIDTH$} {pipe} {main_func_tail}
+"#,
+                header = "[NO MAIN FUNCTION]".red(),
+                context = "All .uwu programs must have a main function".bold(),
+                pipe = "|".blue(),
+                line = self.buffer_pos.0,
+                none = " ",
+                line_text = self.line_text,
+                highlight = format!("{}{}", " ".repeat(self.buffer_pos.1), "^".red(),),
+                error_msg = "expected main function, found EOF".red(),
+                dots = ".".repeat(self.buffer_pos.1.to_string().len() + 1).blue(),
+                suggestion = ">_< Define a main function".green().italic(),
+                line_1 = self.buffer_pos.0 + 1,
+                line_2 = self.buffer_pos.0 + 2,
+                line_3 = self.buffer_pos.0 + 3,
+                main_func_head = "fun main-san() {".green(),
+                main_func_body = "    pwint(\"hewwo world :3\")~".green(),
+                main_func_tail = "}".green(),
             )
-            .as_str(),
-        );
-        msg.push_str((".".repeat(line_no.len() + 1) + "  \n").blue().as_str());
-        msg.push_str((".".repeat(line_no.len() + 1) + "  ").blue().as_str());
-        msg.push_str(format!("Define a main function\n",).green().as_str());
-        msg.push_str(
-            format!(
-                "{}{}\n{}{}\n{}{}\n",
-                format!("{: >width$} | ", self.end_pos.0 + 1, width = line_no.len()).blue(),
-                "fun main-san() {".green(),
-                format!("{: >width$} | ", self.end_pos.0 + 2, width = line_no.len()).blue(),
-                "    pwint(\"hewwo world :3\")~".green(),
-                format!("{: >width$} | ", self.end_pos.0 + 3, width = line_no.len()).blue(),
-                "}".green(),
-            )
-            .as_str(),
-        );
-        msg
+            .trim()
+        )
     }
 }
 
-pub struct NonCallableInPipelineError {
-    line_texts: Vec<&'static str>,
-    id: Identifier,
-    last_type: &'static str,
+//
+pub struct NonCallableInPipelineError<'a> {
+    pipeline_lines: Vec<&'a str>,
+    pipeline_pos: (usize, usize),
+    non_callable_str: &'a str,
+    non_callable_formatted_str: &'a str,
+    last_type: &'a str,
 }
-impl NonCallableInPipelineError {
-    pub fn new(line_texts: Vec<&'static str>, id: Identifier) -> Self {
+impl<'a> NonCallableInPipelineError<'a> {
+    /// - `pipeline_lines`: text separated by newline of the entire pipeline
+    /// including the error.
+    /// - `pipeline_pos`: starting buffer position of the entire pipeline.
+    /// - `non_callable_str`: unformatted non-callable in the pipeline that
+    /// caused the error.
+    /// - `non_callable_formatted_str`: the non-callable in pipeline formatted
+    /// for the error message
+    /// - `non_callable_line_end`: the last line of non_callable if it spans
+    /// multiple lines.
+    /// - `last_type`: the type of construct the non callable is for it to not
+    /// be allowed in the pipeline expression.
+    pub fn new(
+        pipeline_lines: Vec<&'a str>,
+        pipeline_pos: (usize, usize),
+        non_callable_str: &'a str,
+        non_callable_formatted_str: &'a str,
+        last_type: &'a str,
+    ) -> Self {
         Self {
-            line_texts,
-            id: id.clone(),
-            last_type: match id {
-                Identifier::Token(_) => "variable",
-                Identifier::Indexed(_) => "indexed variable",
-                Identifier::Access(access) => match access {
-                    AccessType::Field(field) => {
-                        match field.accessed.last().cloned().unwrap_or_default() {
-                            Accessor::Token(_) => "field",
-                            Accessor::IndexedId(_) => "indexed field",
-                            _ => unreachable!("NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place")
-                        }
-                    }
-                    _ => unreachable!("NonCallableInPipeError::new(): cannot be Method when the error is it isn't a callable in the first place")
-                },
-                Identifier::FnCall(_) => unreachable!(
-                    "NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place"
-                )
-            },
+            pipeline_lines,
+            pipeline_pos,
+            non_callable_str,
+            non_callable_formatted_str,
+            last_type,
         }
     }
 }
-impl CompilerError for NonCallableInPipelineError {
-    fn message(&self) -> String {
-        let mut msg = String::new();
-        // header
-        msg.push_str(
+impl<'a> fmt::Display for NonCallableInPipelineError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ok_pipeline_lines = self
+            .pipeline_lines
+            .iter()
+            .take(self.pipeline_lines.len() - self.non_callable_str.lines().count() - 1)
+            .collect::<Vec<_>>();
+        println!("ok pipeline lines {ok_pipeline_lines:#?}");
+        let error_lines = self
+            .pipeline_lines
+            .iter()
+            .skip(ok_pipeline_lines.len())
+            .zip(self.non_callable_str.lines())
+            .collect::<Vec<_>>();
+        println!("error_lines ({}): {error_lines:#?}", error_lines.len());
+        write!(
+            f,
+            "{}",
             format!(
-                "{} {}\n",
-                "[NON CALLABLE IN PIPELINE]".red().bold(),
-                format!(
+                r#"
+{header} {line_col_info}
+{context}
+{none:COL_WIDTH$} {pipe}
+{preview_ok}{none:COL_WIDTH$} {pipe} {padding}{error_msg}
+{preview_error}
+"#,
+                header = "[NON CALLABLE IN PIPELINE]".red(),
+                line_col_info = format!(
                     "starting at line {} column {}",
-                    self.id.range().start.0,
-                    self.id.range().start.1,
+                    self.pipeline_pos.0 + 1,
+                    self.pipeline_pos.1 + 1,
                 )
                 .bold(),
-            )
-            .as_str(),
-        );
-        msg.push_str(
-            format!(
-                "{} {}\n",
-                self.id.string(0).bold().underline(),
-                "is not callable so it's not allowed in pipeline expressions".italic()
-            )
-            .as_str(),
-        );
-        // preview
-        let side_border_empty = format!(
-            "{: >width$} |\n",
-            "",
-            width = self.id.range().start.0.to_string().len()
-        )
-        .blue();
-        msg.push_str(side_border_empty.as_str());
-        msg.push_str(
-            format!(
-                "{}\n",
-                self.line_texts
+                context = format!(
+                    "{} {}",
+                    self.non_callable_formatted_str.bold().underline(),
+                    "is not callable so it's not allowed in pipeline expressions".italic()
+                ),
+                none = " ",
+                pipe = "|".blue(),
+                preview_ok = match ok_pipeline_lines.len() {
+                    0 => "".into(),
+                    _ =>
+                        ok_pipeline_lines
+                            .iter()
+                            .enumerate()
+                            .map(|(i, line)| {
+                                let line_no = (self.pipeline_pos.0 + 1 + i).to_string();
+                                let side_border = format!("{: >COL_WIDTH$} | ", line_no).blue();
+                                format!("{}{}", side_border, line,)
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                            + "\n",
+                },
+                padding = " ".repeat(
+                    error_lines
+                        .iter()
+                        .map(|(&line, _)| line)
+                        .collect::<Vec<_>>()
+                        .first()
+                        .unwrap_or(&&"")
+                        .chars()
+                        .take_while(|c| c.is_ascii_whitespace())
+                        .collect::<Vec<_>>()
+                        .len()
+                ),
+                error_msg = format!(">_< unexpected {}", self.last_type).red().italic(),
+                preview_error = error_lines
                     .iter()
                     .enumerate()
-                    .map(|(i, line)| {
-                        let line_no = (self.id.range().start.0 + i).to_string();
-                        let side_border =
-                            format!("{: >width$} | ", line_no, width = line_no.len()).blue();
+                    .map(|(i, (line, err))| {
+                        let line_no =
+                            (self.pipeline_pos.0 + 1 + ok_pipeline_lines.len() + i).to_string();
+                        let side_border = format!("{: >COL_WIDTH$} | ", line_no).blue();
+                        println!(
+                            "DEBUG: line {line} [{:?}] {} : {}",
+                            line.find(err),
+                            err,
+                            err.red()
+                        );
                         format!(
-                            "{}{}{}",
+                            "{}{}",
                             side_border,
-                            line,
-                            match (i + 1) == self.line_texts.len() {
-                                true => format!(
-                                    "\n{}{}{} {} {}",
-                                    format!("{: >width$} | ", "", width = line_no.len()).blue(),
-                                    " ".repeat(self.id.range().end.1 - self.id.string(0).len() + 1),
-                                    "^".repeat(self.id.string(0).len()).red(),
-                                    "unexpected".red(),
-                                    self.last_type.red()
-                                ),
-                                false => "".to_string(),
-                            }
+                            line.replace(err.trim(), err.red().as_str())
                         )
                     })
                     .collect::<Vec<_>>()
                     .join("\n"),
             )
-            .as_str(),
-        );
-        msg
-    }
-}
-
-pub struct ParamAfterVariadicParamError {
-    variadic_line_text: &'static str,
-    extra_line_text: &'static str,
-    variadic: Param,
-    extra: Param,
-}
-impl ParamAfterVariadicParamError {
-    pub fn new(
-        variadic_line_text: &'static str,
-        extra_line_text: &'static str,
-        variadic: Param,
-        extra: Param,
-    ) -> Self {
-        Self {
-            variadic_line_text,
-            extra_line_text,
-            variadic,
-            extra,
-        }
-    }
-    fn preview_remove(&self, context: &str, param: &Param, line_text: String) -> String {
-        let mut msg = String::new();
-        let line_no = param.range.start.0.to_string();
-        let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
-        let side_border_empty = format!("{: >width$} | ", "", width = line_no.len()).blue();
-        msg.push_str(side_border.as_str());
-        msg.push_str(
-            format!(
-                "{}\n",
-                line_text.replace(
-                    param.string(0).as_str(),
-                    param.string(0).red().strikethrough().as_str()
-                )
-            )
-            .as_str(),
-        );
-        msg.push_str(side_border_empty.as_str());
-        msg.push_str(
-            format!(
-                "{}{} {}\n",
-                " ".repeat(param.range.start.1),
-                "^".repeat(param.range.end.1 - param.range.start.1 + 1)
-                    .red(),
-                context.red(),
-            )
-            .as_str(),
-        );
-        msg
-    }
-}
-impl CompilerError for ParamAfterVariadicParamError {
-    fn message(&self) -> String {
-        let mut msg = String::new();
-        msg.push_str(
-            format!(
-                "{} {}\n",
-                "[PARAMETER AFTER VARIADIC PARAMETER]".red(),
-                if self.extra.range.start.1 == self.extra.range.end.1 {
-                    format!(
-                        "at line {} column {}",
-                        self.extra.range.start.0, self.extra.range.end.1
-                    )
-                    .bold()
-                } else {
-                    format!(
-                        "at line {} from column {} to {}",
-                        self.extra.range.start.0, self.extra.range.start.1, self.extra.range.end.1,
-                    )
-                    .bold()
-                }
-            )
-            .as_str(),
-        );
-        msg.push_str(
-            "No other parameters should be defined after a variadic parameter\n"
-                .italic()
-                .as_str(),
-        );
-        msg.push_str(
-            format!(
-                "'{}' appeared after '{}'\n",
-                self.extra.string(0),
-                self.variadic.string(0),
-            )
-            .italic()
-            .as_str(),
-        );
-        let side_border_empty = format!(
-            "{: >width$} | ",
-            "",
-            width = self.variadic.range.start.0.to_string().len()
+            .trim()
         )
-        .blue();
-        msg.push_str(
-            format!(
-                "{}\n{}{}\n",
-                side_border_empty,
-                side_border_empty,
-                "try any of the following 3 suggestions:".green()
-            )
-            .as_str(),
-        );
-        // preview variadic
-        msg.push_str(
-            self.preview_remove(
-                "remove the variadic parameter",
-                &self.variadic,
-                self.variadic_line_text.replace(
-                    self.variadic.string(0).as_str(),
-                    self.variadic.string(0).red().as_str(),
-                ),
-            )
-            .as_str(),
-        );
-        // preview extra
-        msg.push_str(
-            self.preview_remove(
-                "remove the extra parameter",
-                &self.extra,
-                self.extra_line_text.replace(
-                    self.extra.string(0).as_str(),
-                    self.extra.string(0).red().as_str(),
-                ),
-            )
-            .as_str(),
-        );
-        // preview changing extra to variadic to normal param
-        let line_no = self.variadic.range.start.0.to_string();
-        let line_text = self.variadic_line_text.replace(
-            self.variadic.string(0).as_str(),
-            self.variadic.string(0).replace("...", "").green().as_str(),
-        );
-        let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
-        msg.push_str(side_border.as_str());
-        msg.push_str(
-            format!(
-                "{}\n",
-                line_text.replace(
-                    self.variadic.string(0).as_str(),
-                    self.variadic.string(0).red().as_str()
-                )
-            )
-            .as_str(),
-        );
-        msg.push_str(side_border_empty.as_str());
-        msg.push_str(
-            format!(
-                "{}{} {}\n",
-                " ".repeat(self.variadic.range.start.1),
-                "^".repeat(self.variadic.range.end.1 - self.variadic.range.start.1 - 2)
-                    .green(),
-                format!(
-                    "turn '{}' into a non variadic parameter",
-                    self.variadic.string(0)
-                )
-                .green(),
-            )
-            .as_str(),
-        );
-        msg
     }
 }
 
-pub struct UnexpectedTokenError {
-    actual: Token,
-    expected: Vec<TokenKind>,
-    header: Option<&'static str>,
-    context: Option<&'static str>,
-    line_text: &'static str,
-    pos: (usize, usize),
-    end_pos: (usize, usize),
+pub struct UnexpectedTokenError<'a> {
+    actual_str: &'a str,
+    actual_kind: TokenKind,
+    actual_buffer_pos: (usize, usize),
+    expected_kinds: Vec<TokenKind>,
+    header: Option<&'a str>,
+    context: Option<&'a str>,
+    line_text: &'a str,
+    line_before_text: &'a str,
 }
-impl UnexpectedTokenError {
+impl<'a> UnexpectedTokenError<'a> {
     pub fn new(
+        source: &'a str,
+        line_starts: &'a Vec<usize>,
         actual: Token,
-        expected: Vec<TokenKind>,
-        header: Option<&'static str>,
-        context: Option<&'static str>,
-        line_text: &'static str,
-        pos: (usize, usize),
-        end_pos: (usize, usize),
+        expected_kinds: Vec<TokenKind>,
+        header: Option<&'a str>,
+        context: Option<&'a str>,
     ) -> Self {
         Self {
-            actual,
-            expected,
+            actual_str: &source[actual.offset.range()],
+            actual_kind: actual.kind,
+            actual_buffer_pos: (
+                actual.buffer_line(line_starts),
+                actual.buffer_col(line_starts),
+            ),
+            expected_kinds,
             header,
             context,
-            line_text,
-            pos: (pos.0 + 1, pos.1 + 1),
-            end_pos: (end_pos.0 + 1, end_pos.1 + 1),
+            line_text: source
+                .lines()
+                .nth(actual.line(line_starts))
+                .unwrap_or_default(),
+            line_before_text: source
+                .lines()
+                .nth(actual.line(line_starts) - 1)
+                .unwrap_or_default(),
         }
     }
 }
-impl CompilerError for UnexpectedTokenError {
-    fn message(&self) -> String {
-        let mut msg = String::new();
-        // header
-        msg.push_str(
+impl<'a> fmt::Display for UnexpectedTokenError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
             format!(
-                "{} {}\n",
-                format!("[{}]", self.header.unwrap_or("UNEXPECTED TOKEN")).red(),
-                if self.pos.1 == self.end_pos.1 {
-                    format!("at line {} column {}", self.pos.0, self.end_pos.1).bold()
+                r#"
+{header} {line_col_info}
+{context}
+{expected}
+{got}
+{none:COL_WIDTH$} {pipe}
+{line_before:COL_WIDTH$} {pipe} {line_before_text}
+{line:COL_WIDTH$} {pipe} {line_text}
+{none:COL_WIDTH$} {pipe} {padding}{highlight} {error_msg}
+"#,
+                header = self.header.unwrap_or("[UNEXPECTED TOKEN]").red(),
+                line_col_info = if self.actual_str.len() == 1 {
+                    format!(
+                        "at line {} column {}",
+                        self.actual_buffer_pos.0, self.actual_buffer_pos.1
+                    )
+                    .bold()
                 } else {
                     format!(
                         "at line {} from column {} to {}",
-                        self.pos.0, self.pos.1, self.end_pos.1
+                        self.actual_buffer_pos.0,
+                        self.actual_buffer_pos.1,
+                        self.actual_buffer_pos.1 + self.actual_str.len() - 1,
                     )
                     .bold()
-                }
+                },
+                context = match &self.context {
+                    Some(ctx) => {
+                        ctx.italic()
+                    }
+                    None => "".to_string(),
+                },
+                expected = format!(
+                    "{} {}",
+                    "Expected any in:".bold(),
+                    self.expected_kinds
+                        .iter()
+                        .map(|e| format!("'{}'", e))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        .italic()
+                ),
+                got = format!(
+                    "{} '{}'",
+                    "Got:".bold(),
+                    self.actual_kind.to_string().italic()
+                )
+                .bold(),
+                none = " ",
+                pipe = "|".blue(),
+                line_before = self.actual_buffer_pos.0 - 1,
+                line_before_text = self.line_before_text,
+                line = self.actual_buffer_pos.0,
+                line_text = self.line_text,
+                padding = " ".repeat(self.actual_buffer_pos.1 - 1),
+                highlight = "^".repeat(self.actual_str.len()).red().italic(),
+                error_msg = "unexpected token".red().italic(),
             )
-            .as_str(),
-        );
-        match &self.context {
-            Some(ctx) => {
-                msg.push_str((ctx.italic() + "\n").as_str());
-            }
-            None => (),
-        }
-        msg.push_str(
-            format!(
-                "{} {}\n",
-                "Expected any in:".bold(),
-                self.expected
-                    .iter()
-                    .map(|e| format!("'{}'", e))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-                    .italic()
-            )
-            .as_str(),
-        );
-        msg.push_str(
-            format!(
-                "{} '{}'\n",
-                "Got:".bold(),
-                self.actual.kind.to_string().italic()
-            )
-            .bold()
-            .as_str(),
-        );
-        // preview
-        let line_no = self.pos.0.to_string();
-        let side_border = format!("{: >width$} | ", line_no, width = line_no.len()).blue();
-        let side_border_empty = format!("{: >width$} | ", "", width = line_no.len()).blue();
-        msg.push_str(format!("{}\n", side_border_empty).as_str());
-        msg.push_str(side_border.as_str());
-        msg.push_str(format!("{}\n", self.line_text).as_str());
-        msg.push_str(side_border_empty.as_str());
-        msg.push_str(
-            format!(
-                "{}{} {}\n",
-                " ".repeat(self.pos.1 - 1),
-                "^".repeat(self.end_pos.1 - self.pos.1 + 1).red(),
-                "unexpected token".red(),
-            )
-            .as_str(),
-        );
-        msg
+            .trim()
+        )
     }
 }
