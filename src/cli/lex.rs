@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     cli::commands::Command,
-    lexer::lexer::Lexer,
+    lexer::{lexer::Lexer, token::Offset},
     utils::{path::PathExt, string::StringExt},
 };
 
@@ -51,53 +51,25 @@ impl Command for Lex {
         Ok(())
     }
     fn exec(&self) -> Result<(), String> {
-        let abs_path = Path::new(&self.arg)
-            .canonicalize()
-            .expect("This was already validated. Something else went wrong!")
-            .display()
-            .to_string();
+        let abs_path = self.path.display().to_string();
         let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
-        let source: &'static str = fs::read_to_string(trimmed_path).unwrap_or_default().leak();
+        let source: String = fs::read_to_string(trimmed_path).unwrap_or_default();
+        let max_line_len = source
+            .lines()
+            .map(|l| l.chars().count())
+            .max()
+            .unwrap_or_default();
         println!(
-            "source:\n{}\n{}\n{}",
-            "-".repeat(
-                source
-                    .lines()
-                    .map(|l| l.chars().count())
-                    .max()
-                    .unwrap_or_default()
-            ),
-            source,
-            "-".repeat(
-                source
-                    .lines()
-                    .map(|l| l.chars().count())
-                    .max()
-                    .unwrap_or_default()
-            )
+            "source:\n{border}\n{source}\n{border}\n",
+            border = "-".repeat(max_line_len),
         );
-        let mut l = Lexer::new(source);
-        l.tokenize();
-        l.pretty_print_tokens();
-        if l.errors.len() > 0 {
-            l.errors.into_iter().for_each(|err| println!("{}", err));
-            Err(format!("Failed to retokenize file: {}", trimmed_path))
-        } else {
-            Ok(())
+        let lexer = Lexer::new(source);
+        lexer.debug_tokens();
+        if lexer.errors.len() > 0 {
+            for error in lexer.errors {
+                println!("{}", error);
+            }
         }
-        // // TEST
-        // let mut l = Lexer::new("hi aqua-chan = 1~");
-        // l.tokenize();
-        // l.pretty_print_tokens();
-        // l = l.retokenize("anatanoteki-desu", (3, 18));
-        // l = l.retokenize(" = 2~", (19, 23));
-        // l = l.retokenize(" >_< comment!", (24, 36));
-        // l = l.retokenize("yo", (0, 1));
-        // if l.errors.len() > 0 {
-        //     l.errors.into_iter().for_each(|err| println!("{}", err));
-        //     Err(format!("Failed to retokenize file: {}", trimmed_path))
-        // } else {
-        //     Ok(())
-        // }
+        Ok(())
     }
 }

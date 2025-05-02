@@ -1,10 +1,31 @@
 use std::fmt;
 
+use crate::lexer::token::Offset;
+
 /// width of the line column in error messages
 pub const COL_WIDTH: usize = 3;
 
 #[derive(Debug)]
-pub enum LexerError {
+pub struct LexerError {
+    pub kind: LexerErrorKind,
+    pub offset: Offset,
+}
+impl fmt::Display for LexerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+impl Default for LexerError {
+    fn default() -> Self {
+        Self {
+            kind: LexerErrorKind::default(),
+            offset: Offset::default(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LexerErrorKind {
     Unexpected(UnexpectedChar),
     Unknown(UnknownChar),
     UnclosedString(UnclosedString),
@@ -14,17 +35,12 @@ pub enum LexerError {
     // for trying another branch like += and +
     TryAgain,
 }
-impl Default for LexerError {
+impl Default for LexerErrorKind {
     fn default() -> Self {
-        Self::Unknown(UnknownChar {
-            ch: '\0',
-            line_text: "".into(),
-            line: 0,
-            col: 0,
-        })
+        Self::TryAgain
     }
 }
-impl fmt::Display for LexerError {
+impl fmt::Display for LexerErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
