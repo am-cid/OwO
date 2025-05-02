@@ -69,13 +69,28 @@ what is your last name?: 1000
 Press Enter to exit...
 ```
 # Declaration and Assignment
+Declare a variable in the format:
+```kotlin
+hi <variable-name>-<variable-type> = <value-assigned>~
+hi aqua-chan = 1~
+```
+The dash followed by the variable type is optional. Variables are immutable
+by default. To declare a mutable variable, put a `!` after the name or the type,
+depending on whether the type is declared.
+```kotlin
+>_< both have type chan
+hi aqua-chan! = 10~
+hi shion! = 10~
+```
+Example:
 ```kotlin
 >_< declare mutable variables by putting ! after the type
 hi global-chan! = 99~ 
 
 fun main-san() {
     >_< declarations are immutable by default
-    hi num-chan = 1~ 
+    >_< the type is optional
+    hi num = 1~ 
 
     >_< reassigning global variable
     global = 0~
@@ -86,6 +101,16 @@ hi global_2-chan = 2~
 ```
 output: `0 1 2`
 # Function Declaration and Calling
+Call a function by referencing its name and putting the arguments enclosed in
+parenthesis:
+```kotlin
+<function-name>()
+<function-name>(<arg1>, <arg2>)
+
+inpwt()~
+pwint("hewwo", "world", ":3")~
+```
+Example:
 ```kotlin
 >_< this is a comment
 
@@ -166,9 +191,9 @@ output: `hello, world!`
     declaration: `hi lap-sama = cap~` (False)<br>
 <br>
 
-5. `san`: null
-    - used for functions that return `nuww` (null) or never returns
-    - identifiers that have this type can only have the value `nuww`<br>
+5. `san`: null<br>
+    Used for functions that return `nuww` (null) or never returns.
+    Identifiers that have this type can only have the value `nuww`.<br>
     function declaration: `fun main-san() { ... }`<br>
     declaration: `hi aqua-san = nuww~`<br>
 <br>
@@ -182,8 +207,21 @@ output: `hello, world!`
     - `dono` alone means any type, even [optional types](#optional-type) and [collection types](#collection-types)
 
 ## Optional Type
+Declare an optional type by putting a `?` after the name or the type,
+depending on whether the type is declared.
 ```kotlin
->_< declare an optional type by putting ? after the type
+>_< both are optional type chan
+hi aqua-chan? = nuww~
+hi shion? = 10~
+```
+To declare a mutable optional type, put `!` before the `?` (order matters)
+```kotlin
+>_< both are mutable optional type chan
+hi aqua-chan!? = nuww~
+hi shion!? = 10~
+```
+Example:
+```kotlin
 >_< optional chan can have an int or nuww as a value
 hi aqua-chan? = 1~
 hi shion-chan? = nuww~
@@ -301,7 +339,38 @@ ojou.unwrap()
     ```
 # User Defined Types
 ## Groups
-Groups are user defined types with fields and methods.
+Groups are user defined types with fields and methods. Define a group in the
+format:
+```kotlin
+gwoup <Group-name> {
+    <field-name>-<field-type>~
+}
+
+gwoup Sample {
+    property-chan~
+    property2-chan~
+}
+```
+Define a method for a group outside the group body as a function in the format:
+```kotlin
+fun <Group-name> <function-name>-<return-type>(<args...>) {
+    <function-body...>
+}
+
+fun Sample debug-san() {
+    pwint(uwu.field)~
+}
+```
+Access the group's fields and other methods by using the `uwu` variable given.
+`uwu` is a regular variable so it's immutable by default. To be able to mutate
+the group's fields within the method, add a `!` after the group name:
+```
+fun Sample! set_field-san(val-chan) {
+    uwu.field = val~
+}
+```
+
+Example:
 ```kotlin
 gwoup Sample {
     property-chan~
@@ -310,23 +379,23 @@ gwoup Sample {
 >_< methods are defined outside gwoup definition
 
 >_< method definition. properties can be accessed using the uwu keyword
-fun Sample print_property-san() {
+fun Sample debug-san() {
     >_< accessing fields
     pwint(uwu.property)~
 }
 
 >_< define a method that modifies state by putting ! after the gwoup name
-fun Sample! modify_state-san(val-chan) {
+fun Sample! modify-san(val-chan) {
     uwu.property = uwu.property + val~
-    uwu.print_property()~
+    uwu.debug()~
     uwu.property2 = val~
 }
 
 fun main-san() {
     >_< all fields must be initialized
-    hi test-Sample = Sample(1,2)~
-    test.print_property()~
-    test.modify_state(3)~
+    hi test = Sample(1,2)~
+    test.debug()~
+    test.modify(3)~
     pwint(test.property2)~
 }
 ```
@@ -337,14 +406,28 @@ output
 3
 ```
 ## Contracts
-Contracts define methods that `gwoups` must implement if put in a group's definition
+Contracts define methods that `gwoups` can implement to satify it. Define a
+contract in the format:
+```kotlin
+contwact <Contract-name> {
+    <method-signature>~
+}
+```
+Where `<method-signature>` only defines the name of the method, return type,
+and the types of the arguments.
+```kotlin
+contwact Contract {
+    method-san(kun, senpai)~
+    method2-san()~
+}
+```
+Example:
 ```
 contwact Contract1 {
     method-san(kun, senpai)~
 }
 
->_< enclose contracts to be implemented in [] after the gwoup name
-gwoup Sample [Contract1] {
+gwoup Sample {
     property-chan~
 }
 
@@ -360,14 +443,8 @@ fun main-san() {
     >_< can access methods defined in the contract
     test.method(2.0 , "three")~
 
-    >_< but cannot access the fields of `Sample`
+    >_< but cannot access the fields of `Sample`, even if it does exist.
     pwint(test.property)~ >_< this will error
-}
-
->_< this group does not fully implement the contract Contract1
->_< this will cause a compile time error
-gwoup Sample2 [Contract1] {
-    property-chan~
 }
 ```
 output
@@ -533,7 +610,11 @@ fun main-san() {
     aqua | pow(4) | pwint()~
     >_< equivalent to: pwint(pow(aqua, 4))~
 
-    totally_random_vec_of_nums()
+    >_< can also just use expressions at the start
+    1 + aqua * 2 | pow(4) | pwint()~
+    >_< equivalent to: pwint(pow(1 + aqua * 2, 4))~
+
+    [6,5,4,3,2,1]
     | filter_evens()
     | sort_ascending()
     | pwint()~
@@ -541,11 +622,11 @@ fun main-san() {
 }
 
 fun pow-chan(num-chan, exp-chan) {
-    wetuwn num ^ exp~
-}
-
-fun totally_random_vec_of_nums-chan[1]() {
-    wetuwn [6,5,4,3,2,1]~
+    hi res! = num~
+    fow hi i = 1~ i < exp~ i + 1 {
+        res *= exp~
+    }
+    wetuwn res~
 }
 
 fun filter_evens-chan[1](vec-chan[1]) {
@@ -555,12 +636,13 @@ fun filter_evens-chan[1](vec-chan[1]) {
             res.push(num)~
         }
     }
+    wetuwn res~
 }
 
 fun sort_ascending-chan[1](vec-chan[1]) {
     hi res-chan[1]! = vec~
-    fow hi i-chan = 1~ i < res.len()~ i+1 {
-        fow hi j-chan = i+1~ j < res.len()~ j+1 {
+    fow hi i-chan = 1~ i <= res.len()~ i+1 {
+        fow hi j-chan = i+1~ j <= res.len()~ j+1 {
             hi outer-chan = res.nth(i).unwrap_or(0)~
             hi inner-chan = res.nth(j).unwrap_or(0)~
             iwf outer < inner { res.swap(i, j)~ }
