@@ -71,64 +71,68 @@ impl Lexer {
         line_starts: &mut Vec<usize>,
     ) -> Result<Token, LexerError> {
         match ch {
-            c if c.is_ascii_alphabetic() => self.lex_id_or_word(base_start, chars),
-            c if c.is_ascii_digit() => self.lex_num(base_start, chars),
-            '"' => self.lex_string(base_start, chars),
-            '\'' => self.lex_char(base_start, chars),
+            c if c.is_ascii_alphabetic() => self.lex_id_or_word(base_start, chars, line_starts),
+            c if c.is_ascii_digit() => self.lex_num(base_start, chars, line_starts),
+            '"' => self.lex_string(base_start, chars, line_starts),
+            '\'' => self.lex_char(base_start, chars, line_starts),
             '\n' => {
                 line_starts.push(base_start + start);
-                self.lex_symbol(TokenKind::Newline, base_start, chars)
+                self.lex_symbol(TokenKind::Newline, base_start, chars, line_starts)
             }
-            '\r' => self.lex_symbol(TokenKind::CarriageReturn, base_start, chars),
-            '\t' => self.lex_symbol(TokenKind::Tab, base_start, chars),
-            ' ' => self.lex_symbol(TokenKind::Whitespace, base_start, chars),
-            '(' => self.lex_symbol(TokenKind::LParen, base_start, chars),
-            ')' => self.lex_symbol(TokenKind::RParen, base_start, chars),
-            '[' => self.lex_symbol(TokenKind::LBracket, base_start, chars),
-            ']' => self.lex_symbol(TokenKind::RBracket, base_start, chars),
-            '{' => self.lex_symbol(TokenKind::LBrace, base_start, chars),
-            '}' => self.lex_symbol(TokenKind::RBrace, base_start, chars),
-            '?' => self.lex_symbol(TokenKind::Question, base_start, chars),
-            ',' => self.lex_symbol(TokenKind::Comma, base_start, chars),
-            ':' => self.lex_symbol(TokenKind::Colon, base_start, chars),
-            '#' => self.lex_symbol(TokenKind::Hash, base_start, chars),
-            '|' => self.lex_symbol(TokenKind::Pipe, base_start, chars),
-            '~' => self.lex_symbol(TokenKind::Terminator, base_start, chars),
+            '\r' => self.lex_symbol(TokenKind::CarriageReturn, base_start, chars, line_starts),
+            '\t' => self.lex_symbol(TokenKind::Tab, base_start, chars, line_starts),
+            ' ' => self.lex_symbol(TokenKind::Whitespace, base_start, chars, line_starts),
+            '(' => self.lex_symbol(TokenKind::LParen, base_start, chars, line_starts),
+            ')' => self.lex_symbol(TokenKind::RParen, base_start, chars, line_starts),
+            '[' => self.lex_symbol(TokenKind::LBracket, base_start, chars, line_starts),
+            ']' => self.lex_symbol(TokenKind::RBracket, base_start, chars, line_starts),
+            '{' => self.lex_symbol(TokenKind::LBrace, base_start, chars, line_starts),
+            '}' => self.lex_symbol(TokenKind::RBrace, base_start, chars, line_starts),
+            '?' => self.lex_symbol(TokenKind::Question, base_start, chars, line_starts),
+            ',' => self.lex_symbol(TokenKind::Comma, base_start, chars, line_starts),
+            ':' => self.lex_symbol(TokenKind::Colon, base_start, chars, line_starts),
+            '#' => self.lex_symbol(TokenKind::Hash, base_start, chars, line_starts),
+            '|' => self.lex_symbol(TokenKind::Pipe, base_start, chars, line_starts),
+            '~' => self.lex_symbol(TokenKind::Terminator, base_start, chars, line_starts),
             '+' => self
-                .lex_symbol(TokenKind::PlusEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Plus, base_start, chars)),
+                .lex_symbol(TokenKind::PlusEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Plus, base_start, chars, line_starts)),
             '-' => self
-                .lex_symbol(TokenKind::DashEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Dash, base_start, chars)),
+                .lex_symbol(TokenKind::DashEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Dash, base_start, chars, line_starts)),
             '*' => self
-                .lex_symbol(TokenKind::MultiplyEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Multiply, base_start, chars)),
+                .lex_symbol(TokenKind::MultiplyEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Multiply, base_start, chars, line_starts)),
             '/' => self
-                .lex_symbol(TokenKind::DivideEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Divide, base_start, chars)),
+                .lex_symbol(TokenKind::DivideEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Divide, base_start, chars, line_starts)),
             '%' => self
-                .lex_symbol(TokenKind::ModuloEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Modulo, base_start, chars)),
+                .lex_symbol(TokenKind::ModuloEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Modulo, base_start, chars, line_starts)),
             '<' => self
-                .lex_symbol(TokenKind::LessEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::LessThan, base_start, chars)),
+                .lex_symbol(TokenKind::LessEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::LessThan, base_start, chars, line_starts)),
             '>' => self
-                .lex_comment(base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::GreaterEqual, base_start, chars))
-                .or_else(|_| self.lex_symbol(TokenKind::GreaterThan, base_start, chars)),
+                .lex_comment(base_start, chars, line_starts)
+                .or_else(|_| {
+                    self.lex_symbol(TokenKind::GreaterEqual, base_start, chars, line_starts)
+                })
+                .or_else(|_| {
+                    self.lex_symbol(TokenKind::GreaterThan, base_start, chars, line_starts)
+                }),
             '=' => self
-                .lex_symbol(TokenKind::Equal, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Assign, base_start, chars)),
+                .lex_symbol(TokenKind::Equal, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Assign, base_start, chars, line_starts)),
             '!' => self
-                .lex_symbol(TokenKind::NotEqual, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Bang, base_start, chars)),
+                .lex_symbol(TokenKind::NotEqual, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Bang, base_start, chars, line_starts)),
             '.' => self
-                .lex_symbol(TokenKind::Ellipsis, base_start, chars)
-                .or_else(|_| self.lex_symbol(TokenKind::Dot, base_start, chars)),
+                .lex_symbol(TokenKind::Ellipsis, base_start, chars, line_starts)
+                .or_else(|_| self.lex_symbol(TokenKind::Dot, base_start, chars, line_starts)),
             ch => {
                 chars.next();
                 let start = base_start + start;
-                Err(self.unknown_char_error(ch, start, start + ch.len_utf8()))
+                Err(self.unknown_char_error(ch, line_starts, start, start + ch.len_utf8()))
             }
         }
     }
@@ -145,6 +149,7 @@ impl Lexer {
         expected: TokenKind,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
         let start = if let Some(&(i, _)) = chars.peek() {
             base_start + i
@@ -155,6 +160,7 @@ impl Lexer {
                     '\n', '\r', '\t', ' ', '(', ')', '[', ']', '{', '}', '?', ',', ':', '#', '|',
                     '~', '+', '-', '*', '/', '%', '<', '>', '=', '!', '.',
                 ],
+                line_starts,
                 base_start,
                 base_start,
             ));
@@ -170,6 +176,9 @@ impl Lexer {
             return Err(LexerError {
                 kind: LexerErrorKind::TryAgain,
                 offset: Offset::zero(),
+                line_offset: Offset::zero(),
+                buffer_line: 0,
+                buffer_col: 0,
             });
         }
         let _ = chars.advance_by(expected_len);
@@ -186,6 +195,7 @@ impl Lexer {
         &self,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
         let mut res = String::new();
         let (start, mut end) = if let Some(&(i, ch)) = chars.peek()
@@ -199,6 +209,7 @@ impl Lexer {
             return Err(self.unexpected_char_error(
                 chars.peek().map(|&(_, ch)| ch).unwrap_or_default(),
                 ('a'..'z').chain('A'..'Z').collect(),
+                line_starts,
                 base_start,
                 base_start,
             ));
@@ -226,6 +237,7 @@ impl Lexer {
         &self,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
         let (start, mut end) = if let Some(&(i, ch)) = chars.peek()
             && ch.is_ascii_digit()
@@ -238,6 +250,7 @@ impl Lexer {
             return Err(self.unexpected_char_error(
                 ch,
                 ('0'..'9').collect(),
+                line_starts,
                 base_start,
                 base_start + ch.len_utf8(),
             ));
@@ -280,8 +293,8 @@ impl Lexer {
         &self,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
-        println!("start string, first peek {:#?}", chars.peek());
         let start = if let Some(&(i, ch)) = chars.peek()
             && ch == '"'
         {
@@ -292,6 +305,7 @@ impl Lexer {
             return Err(self.unexpected_char_error(
                 ch,
                 vec!['"'],
+                line_starts,
                 base_start,
                 base_start + ch.len_utf8(),
             ));
@@ -301,7 +315,7 @@ impl Lexer {
         {
             match ch {
                 '\\' => {
-                    let (i, ch) = chars.next().expect("Peeked beforehand, should exist");
+                    let (i, _) = chars.next().expect("Peeked beforehand, should exist");
                     match chars.peek() {
                         Some(&(i, ch)) => match ch {
                             ch if ['n', 'r', 't', '\\', '0', '"'].contains(&ch) => {
@@ -310,37 +324,32 @@ impl Lexer {
                             ch if ['\r', '\n', '\0'].contains(&ch) => {
                                 return Err(self.unclosed_string_error(
                                     ch,
-                                    i + ch.len_utf8(),
+                                    line_starts,
                                     start,
-                                    base_start + i + ch.len_utf8(),
+                                    base_start + i,
                                 ));
                             }
                             _ => {
                                 return Err(self.invalid_escape_char(
                                     ch,
+                                    line_starts,
                                     start,
-                                    base_start + i + ch.len_utf8(),
+                                    base_start + i,
                                 ));
                             }
                         },
                         None => {
                             return Err(self.unclosed_string_error(
                                 '\0',
-                                i + ch.len_utf8(),
+                                line_starts,
                                 start,
-                                base_start + i + ch.len_utf8(),
+                                base_start + i,
                             ));
                         }
                     }
                 }
                 ch if ['\r', '\n', '\0'].contains(&ch) => {
-                    println!("end string, unclosed string {:#?}", chars.peek());
-                    return Err(self.unclosed_string_error(
-                        ch,
-                        i + ch.len_utf8(),
-                        start,
-                        base_start + i + ch.len_utf8(),
-                    ));
+                    return Err(self.unclosed_string_error(ch, line_starts, start, base_start + i));
                 }
                 _ => {
                     chars.next();
@@ -356,7 +365,7 @@ impl Lexer {
                     Offset::new(start, base_start + closing_idx + closing.len_utf8()),
                 ))
             }
-            None => Err(self.unclosed_string_error('\0', 0, start, self.source.len())),
+            None => Err(self.unclosed_string_error('\0', line_starts, start, self.source.len())),
             _ => unreachable!(
                 r#"The only thing that can exit the string loop is a closing ", or never entering it in the first place, aka EOF."#
             ),
@@ -370,58 +379,50 @@ impl Lexer {
         &self,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
-        let (start, end) = if let Some(&(i, ch)) = chars.peek()
+        let start = if let Some(&(i, ch)) = chars.peek()
             && ch == '\''
         {
             chars.next();
-            let start = base_start + i;
-            (start, start + ch.len_utf8())
+            base_start + i
         } else {
             let ch = chars.peek().map(|&(_, ch)| ch).unwrap_or_default();
             return Err(self.unexpected_char_error(
                 ch,
                 vec!['\''],
+                line_starts,
                 base_start,
                 base_start + ch.len_utf8(),
             ));
         };
-        let end = match chars.next() {
-            Some((i, ch @ '\\')) => match chars.peek() {
+        match chars.next() {
+            Some((i, '\\')) => match chars.peek() {
                 Some((_, 'n' | 'r' | 't' | '\\' | '0')) => {
                     let (i, ch) = chars.next().expect("Peeked beforehand, should exist");
                     start + i + ch.len_utf8()
                 }
                 Some(&(i, ch)) => {
-                    return Err(self.invalid_escape_char(
-                        ch,
-                        start,
-                        base_start + i + ch.len_utf8(),
-                    ));
+                    return Err(self.invalid_escape_char(ch, line_starts, start, base_start + i));
                 }
                 None => {
-                    return Err(self.unclosed_char_error(
-                        '\0',
-                        i + ch.len_utf8(),
-                        start,
-                        base_start + i + ch.len_utf8(),
-                    ));
+                    return Err(self.unclosed_char_error('\0', line_starts, start, base_start + i));
                 }
             },
             Some((i, ch @ ('\r' | '\n' | '\0'))) => {
                 return Err(self.unclosed_char_error(
                     ch,
-                    i + ch.len_utf8(),
+                    line_starts,
                     start,
                     base_start + i + ch.len_utf8(),
                 ));
             }
-            Some((i, ch @ '\'')) => {
-                return Err(self.empty_char_error(start, base_start + i + ch.len_utf8()));
+            Some((i, '\'')) => {
+                return Err(self.empty_char_error(line_starts, start, base_start + i));
             }
             Some((i, ch)) => start + i + ch.len_utf8(),
             None => {
-                return Err(self.unclosed_char_error('\0', end - start, start, self.source.len()));
+                return Err(self.unclosed_char_error('\0', line_starts, start, self.source.len()));
             }
         };
         // consume closing '
@@ -433,13 +434,13 @@ impl Lexer {
             Some(&(i, ch)) => {
                 return Err(self.unclosed_char_error(
                     ch,
-                    i + ch.len_utf8(),
+                    line_starts,
                     start,
                     base_start + i + ch.len_utf8(),
                 ));
             }
             None => {
-                return Err(self.unclosed_char_error('\0', end - start, start, self.source.len()));
+                return Err(self.unclosed_char_error('\0', line_starts, start, self.source.len()));
             }
         };
         Ok(Token::new(
@@ -455,6 +456,7 @@ impl Lexer {
         &self,
         base_start: usize,
         chars: &mut MultiPeek<CharIndices<'_>>,
+        line_starts: &Vec<usize>,
     ) -> Result<Token, LexerError> {
         let start = if let Some(&(i, ch)) = chars.peek()
             && ch == '>'
@@ -465,6 +467,7 @@ impl Lexer {
             return Err(self.unexpected_char_error(
                 ch,
                 vec!['>'],
+                line_starts,
                 base_start,
                 base_start + ch.len_utf8(),
             ));
@@ -486,6 +489,9 @@ impl Lexer {
             Err(LexerError {
                 kind: LexerErrorKind::TryAgain,
                 offset: Offset::zero(),
+                line_offset: Offset::zero(),
+                buffer_line: 0,
+                buffer_col: 0,
             })
         }
     }
@@ -494,21 +500,21 @@ impl Lexer {
 
     // HELPER METHODS {{{
 
-    /// Create position information (line, column) and gets current line text
+    /// Create position information (line, column) and gets current line offset
     /// for error messages.
     ///
     /// Uses line texts as it's being built during lexing so this should only be
     /// called **DURING** lexing
-    fn error_context(&self, start: usize) -> (String, usize, usize) {
-        let line = self.line_starts.len().saturating_sub(1);
-        let line_text = self.source.lines().nth(line).unwrap_or_default().into();
+    fn error_context(&self, start: usize, line_starts: &Vec<usize>) -> (Offset, usize, usize) {
+        let line = line_starts.len().saturating_sub(1);
+        let line_range = self.source.line_range(line);
         let col = start
-            .saturating_sub(*self.line_starts.iter().last().unwrap_or(&0))
+            .saturating_sub(*line_starts.iter().last().unwrap_or(&0))
             .saturating_sub(match line {
                 0 => 0,
                 _ => 1,
             });
-        (line_text, line, col)
+        (Offset::new(line_range.0, line_range.1), line, col)
     }
 
     // }}}
@@ -519,97 +525,102 @@ impl Lexer {
         &self,
         actual: char,
         expected: Vec<char>,
+        line_starts: &Vec<usize>,
         start: usize,
         end: usize,
     ) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
-            kind: LexerErrorKind::Unexpected(UnexpectedChar {
-                actual,
-                expected,
-                line_text,
-                line,
-                col,
-            }),
+            kind: LexerErrorKind::Unexpected(UnexpectedChar { actual, expected }),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col + 1,
         }
     }
 
-    fn unknown_char_error(&self, ch: char, start: usize, end: usize) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+    fn unknown_char_error(
+        &self,
+        ch: char,
+        line_starts: &Vec<usize>,
+        start: usize,
+        end: usize,
+    ) -> LexerError {
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
-            kind: LexerErrorKind::Unknown(UnknownChar {
-                ch,
-                line_text,
-                line,
-                col,
-            }),
+            kind: LexerErrorKind::Unknown(UnknownChar { ch }),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col,
         }
     }
 
     fn unclosed_string_error(
         &self,
         actual: char,
-        length: usize,
+        line_starts: &Vec<usize>,
         start: usize,
         end: usize,
     ) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
             kind: LexerErrorKind::UnclosedString(UnclosedString {
                 actual,
-                line_text,
-                line,
-                col,
-                length: length + 1,
+                length: end - start + 1,
             }),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col + 1,
         }
     }
 
-    fn invalid_escape_char(&self, actual: char, start: usize, end: usize) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+    fn invalid_escape_char(
+        &self,
+        actual: char,
+        line_starts: &Vec<usize>,
+        start: usize,
+        end: usize,
+    ) -> LexerError {
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
-            kind: LexerErrorKind::InvalidEscapeChar(InvalidEscapeChar {
-                actual,
-                line_text,
-                line,
-                col,
-            }),
+            kind: LexerErrorKind::InvalidEscapeChar(InvalidEscapeChar { actual }),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col + 1,
         }
     }
 
     fn unclosed_char_error(
         &self,
         actual: char,
-        length: usize,
+        line_starts: &Vec<usize>,
         start: usize,
         end: usize,
     ) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
             kind: LexerErrorKind::UnclosedChar(UnclosedChar {
                 actual,
-                line_text,
-                line,
-                col,
-                length: length + 1,
+                length: end - start,
             }),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col + 1,
         }
     }
 
-    fn empty_char_error(&self, start: usize, end: usize) -> LexerError {
-        let (line_text, line, col) = self.error_context(end);
+    fn empty_char_error(&self, line_starts: &Vec<usize>, start: usize, end: usize) -> LexerError {
+        let (line_offset, line, col) = self.error_context(end, line_starts);
         LexerError {
-            kind: LexerErrorKind::EmptyChar(EmptyChar {
-                line_text,
-                line,
-                col,
-            }),
+            kind: LexerErrorKind::EmptyChar(EmptyChar {}),
             offset: Offset::new(start, end),
+            line_offset,
+            buffer_line: line + 1,
+            buffer_col: col + 1,
         }
     }
 
@@ -675,31 +686,43 @@ pub struct LexerResult {
 
 // LEXER HELPERS {{{
 
-/// helper trait to make tokenizing a bit easier
+/// helper trait for allowing underscores to be part of an identifier/number
+/// when lexing.
 pub trait LexerCharExt {
     fn is_lexer_identifier(&self) -> bool;
     fn is_lexer_digit(&self) -> bool;
 }
 impl LexerCharExt for char {
+    /// checks if char is alphanumeric or _
     fn is_lexer_identifier(&self) -> bool {
         *self == '_' || self.is_ascii_alphanumeric()
     }
+    /// checks if char is digit or _
     fn is_lexer_digit(&self) -> bool {
         *self == '_' || self.is_ascii_digit()
     }
 }
-impl LexerCharExt for Option<&char> {
-    fn is_lexer_identifier(&self) -> bool {
-        match *self {
-            None => false,
-            Some(ch) => ch.is_lexer_identifier(),
+
+/// helper trait for extending the source of the lexer.
+pub trait LexerSourceExt {
+    fn line_range(&self, line_number: usize) -> (usize, usize);
+}
+impl LexerSourceExt for str {
+    /// gets the range of the given line number (0-indexed)
+    fn line_range(&self, line_number: usize) -> (usize, usize) {
+        let mut start = 0;
+        let mut line_count = 0;
+        let mut chars = self.char_indices().peekable();
+        while let Some((i, c)) = chars.next() {
+            if c == '\n' {
+                if line_count == line_number {
+                    return (start, i + 1);
+                }
+                line_count += 1;
+                start = i + 1;
+            }
         }
-    }
-    fn is_lexer_digit(&self) -> bool {
-        match *self {
-            None => false,
-            Some(ch) => ch.is_lexer_digit(),
-        }
+        (0, self.len())
     }
 }
 

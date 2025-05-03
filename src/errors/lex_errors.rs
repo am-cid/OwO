@@ -1,6 +1,4 @@
-use std::fmt;
-
-use crate::lexer::token::Offset;
+use crate::lexer::token::{Offset, Position};
 
 /// width of the line column in error messages
 pub const COL_WIDTH: usize = 3;
@@ -9,10 +7,22 @@ pub const COL_WIDTH: usize = 3;
 pub struct LexerError {
     pub kind: LexerErrorKind,
     pub offset: Offset,
+    pub line_offset: Offset,
+    pub buffer_line: usize,
+    pub buffer_col: usize,
 }
-impl fmt::Display for LexerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.kind)
+impl LexerError {
+    pub fn source_string(&self, source: &str) -> String {
+        self.kind.source_string(
+            self.source_str(source).trim(),
+            self.buffer_line,
+            self.buffer_col,
+        )
+    }
+}
+impl Position<'_> for LexerError {
+    fn offset(&self) -> Offset {
+        self.line_offset
     }
 }
 impl Default for LexerError {
@@ -20,6 +30,9 @@ impl Default for LexerError {
         Self {
             kind: LexerErrorKind::default(),
             offset: Offset::default(),
+            line_offset: Offset::default(),
+            buffer_line: 1,
+            buffer_col: 1,
         }
     }
 }
@@ -40,21 +53,25 @@ impl Default for LexerErrorKind {
         Self::TryAgain
     }
 }
-impl fmt::Display for LexerErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Unexpected(res) => res.to_string(),
-                Self::Unknown(res) => res.to_string(),
-                Self::UnclosedString(res) => res.to_string(),
-                Self::InvalidEscapeChar(res) => res.to_string(),
-                Self::UnclosedChar(res) => res.to_string(),
-                Self::EmptyChar(res) => res.to_string(),
-                Self::TryAgain => "try again".into(),
+impl LexerErrorKind {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        match self {
+            LexerErrorKind::Unexpected(err) => {
+                err.source_string(line_text, buffer_line, buffer_col)
             }
-        )
+            LexerErrorKind::Unknown(err) => err.source_string(line_text, buffer_line, buffer_col),
+            LexerErrorKind::UnclosedString(err) => {
+                err.source_string(line_text, buffer_line, buffer_col)
+            }
+            LexerErrorKind::InvalidEscapeChar(err) => {
+                err.source_string(line_text, buffer_line, buffer_col)
+            }
+            LexerErrorKind::UnclosedChar(err) => {
+                err.source_string(line_text, buffer_line, buffer_col)
+            }
+            LexerErrorKind::EmptyChar(err) => err.source_string(line_text, buffer_line, buffer_col),
+            LexerErrorKind::TryAgain => "".into(),
+        }
     }
 }
 
@@ -62,40 +79,27 @@ impl fmt::Display for LexerErrorKind {
 pub struct UnexpectedChar {
     pub actual: char,
     pub expected: Vec<char>,
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
 }
-impl fmt::Display for UnexpectedChar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[UNEXPECTED TOKEN] at line {line}, col {col}
+impl UnexpectedChar {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[UNEXPECTED TOKEN] at line {buffer_line}, col {buffer_col}
 Expected any in: {expected}
 Got: {got}
 ------{border}
-{line:COL_WIDTH$} | {line_text}
+{buffer_line:COL_WIDTH$} | {line_text}
 {none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col = self.col + 1,
-                expected = self
-                    .expected
-                    .iter()
-                    .map(|e| format!("'{}'", e))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                got = self.actual,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + "^",
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim(),
+------{border}"#,
+            expected = self
+                .expected
+                .iter()
+                .map(|e| format!("'{}'", e))
+                .collect::<Vec<_>>()
+                .join(", "),
+            got = self.actual,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - 1) + "^",
+            none = " ",
         )
     }
 }
@@ -103,32 +107,19 @@ Got: {got}
 #[derive(Debug)]
 pub struct UnknownChar {
     pub ch: char,
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
 }
-impl fmt::Display for UnknownChar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[UNKNOWN TOKEN {token:?}] at line {line}, col {col}
+impl UnknownChar {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[UNKNOWN TOKEN {token:?}] at line {buffer_line}, col {buffer_col}
 ------{border}
-{line:COL_WIDTH$} | {line_text}
+{buffer_line:COL_WIDTH$} | {line_text}
 {none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col = self.col + 1,
-                token = self.ch,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + "^",
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim(),
+------{border}"#,
+            token = self.ch,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - 1) + "^",
+            none = " ",
         )
     }
 }
@@ -136,71 +127,24 @@ impl fmt::Display for UnknownChar {
 #[derive(Debug)]
 pub struct UnclosedString {
     pub actual: char,
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
     pub length: usize,
 }
-impl fmt::Display for UnclosedString {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[UNCLOSED STRING] at line {line}, col {col_start}-{col_end}
+impl UnclosedString {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[UNCLOSED STRING] at line {buffer_line}, col {col_start}-{col_end}
     Expected: '"'
     Got: {actual:?}
 ------{border}
-{line:COL_WIDTH$} | {line_text}
+{buffer_line:COL_WIDTH$} | {line_text}
 {none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col_start = self.col + 1,
-                col_end = self.col + self.length,
-                actual = self.actual,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + &"^".repeat(self.length),
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim(),
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct InvalidEscapeChar {
-    pub actual: char,
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
-}
-impl fmt::Display for InvalidEscapeChar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[INVALID ESCAPE] at line {line}, col {col}
-Valid escapes: \n, \t, \r, \\, \', \", \0
-Got: {got}
-------{border}
-{line:COL_WIDTH$} | {line_text}
-{none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col = self.col + 1,
-                got = self.actual,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + "^",
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim(),
+------{border}"#,
+            col_start = buffer_col + 1 - self.length,
+            col_end = buffer_col,
+            actual = self.actual,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - self.length) + &"^".repeat(self.length),
+            none = " ",
         )
     }
 }
@@ -208,69 +152,67 @@ Got: {got}
 #[derive(Debug)]
 pub struct UnclosedChar {
     pub actual: char,
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
     pub length: usize,
 }
-impl fmt::Display for UnclosedChar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[UNCLOSED CHARACTER] at line {line}, col {col_start}-{col_end}
+impl UnclosedChar {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[UNCLOSED CHARACTER] at line {buffer_line}, col {col_start}-{col_end}
     Expected "'"
     Got: {actual:?}
 ------{border}
-{line:COL_WIDTH$} | {line_text}
+{buffer_line:COL_WIDTH$} | {line_text}
 {none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col_start = self.col + 1,
-                col_end = self.col + self.length,
-                actual = self.actual,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + &"^".repeat(self.length),
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim()
+------{border}"#,
+            col_start = buffer_col - self.length,
+            col_end = buffer_col,
+            actual = self.actual,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - 1 - self.length) + &"^".repeat(self.length),
+            none = " ",
         )
     }
 }
 
 #[derive(Debug)]
-pub struct EmptyChar {
-    pub line_text: String,
-    pub line: usize,
-    pub col: usize,
+pub struct InvalidEscapeChar {
+    pub actual: char,
 }
-impl fmt::Display for EmptyChar {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-[EMPTY CHARACTER LITERAL] at line {line}, col {col_start}-{col_end}
+impl InvalidEscapeChar {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[INVALID ESCAPE] at line {buffer_line}, col {buffer_col}
+Valid escapes: \n, \t, \r, \\, \', \", \0
+Got: {got}
+------{border}
+{buffer_line:COL_WIDTH$} | {line_text}
+{none:COL_WIDTH$} | {highlight}
+------{border}"#,
+            got = self.actual,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - 1) + "^",
+            none = " ",
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct EmptyChar {}
+impl EmptyChar {
+    fn source_string(&self, line_text: &str, buffer_line: usize, buffer_col: usize) -> String {
+        format!(
+            r#"[EMPTY CHARACTER LITERAL] at line {buffer_line}, col {col_start}-{col_end}
     Character literals should not be empty
 ------{border}
-{line:COL_WIDTH$} | {line_text}
+{buffer_line:COL_WIDTH$} | {line_text}
 {none:COL_WIDTH$} | {highlight}
-------{border}
-"#,
-                line = self.line + 1,
-                col_start = self.col + 1,
-                col_end = self.col + 2,
-                border = "-".repeat(self.line_text.len()),
-                highlight = " ".repeat(self.col) + &"^^",
-                line_text = self.line_text,
-                none = " ",
-            )
-            .trim(),
+------{border}"#,
+            col_start = buffer_col - 1,
+            col_end = buffer_col,
+            border = "-".repeat(line_text.len()),
+            highlight = " ".repeat(buffer_col - 2) + &"^^",
+            line_text = line_text,
+            none = " ",
         )
     }
 }
