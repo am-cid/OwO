@@ -367,6 +367,7 @@ impl<'a> UnexpectedTokenError<'a> {
         header: Option<&'a str>,
         context: Option<&'a str>,
     ) -> Self {
+        let line = actual.line(line_starts);
         Self {
             actual_str: &source[actual.offset.range()],
             actual_kind: actual.kind,
@@ -377,14 +378,11 @@ impl<'a> UnexpectedTokenError<'a> {
             expected_kinds,
             header,
             context,
-            line_text: source
-                .lines()
-                .nth(actual.line(line_starts))
-                .unwrap_or_default(),
-            line_before_text: source
-                .lines()
-                .nth(actual.line(line_starts) - 1)
-                .unwrap_or_default(),
+            line_text: source.lines().nth(line).unwrap_or_default(),
+            line_before_text: match line {
+                0 => "".into(),
+                _ => source.lines().nth(line - 1).unwrap_or_default(),
+            },
         }
     }
 }
@@ -444,7 +442,10 @@ impl<'a> fmt::Display for UnexpectedTokenError<'a> {
                 .bold(),
                 none = " ",
                 pipe = "|".blue(),
-                line_before = self.actual_buffer_pos.0 - 1,
+                line_before = match self.actual_buffer_pos.0 - 1 {
+                    0 => "".into(),
+                    rest => rest.to_string(),
+                },
                 line_before_text = self.line_before_text,
                 line = self.actual_buffer_pos.0,
                 line_text = self.line_text,
