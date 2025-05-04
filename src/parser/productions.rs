@@ -1071,49 +1071,6 @@ impl From<Accessed> for Expression {
 }
 
 #[derive(Clone, Debug)]
-pub enum Callable {
-    Fn(FnCall),
-    Method(GroupAccess<MethodAccess>),
-    GroupInit(GroupInit),
-}
-impl Callable {
-    fn as_position(&self) -> &dyn Position {
-        match self {
-            Self::Fn(res) => res,
-            Self::Method(res) => res,
-            Self::GroupInit(res) => res,
-        }
-    }
-    fn as_production(&self) -> &dyn Production {
-        match self {
-            Self::Fn(res) => res,
-            Self::Method(res) => res,
-            Self::GroupInit(res) => res,
-        }
-    }
-}
-impl Default for Callable {
-    fn default() -> Self {
-        Self::Fn(FnCall::new(
-            Token::default(),
-            vec![],
-            FnSignature::default(),
-            (0, 0),
-        ))
-    }
-}
-impl<'a> Position<'a> for Callable {
-    fn offset(&self) -> Offset {
-        self.as_position().offset()
-    }
-}
-impl<'a> Production<'a> for Callable {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
-        self.as_production().to_formatted_string(source, n)
-    }
-}
-
-#[derive(Clone, Debug)]
 pub struct FnCall {
     pub id: Token,
     pub args: Vec<Expression>,
@@ -1566,14 +1523,14 @@ impl<'a> Production<'a> for GroupedExpression {
 pub struct Pipeline {
     pub first: Box<Expression>,
     /// guaranteed to always be at least size 1
-    pub rest: Vec<Callable>,
+    pub rest: Vec<Expression>,
     pos: Offset,
 }
 impl Pipeline {
-    pub fn new(first: Box<Expression>, rest: Vec<Callable>) -> Self {
+    pub fn new(first: Box<Expression>, rest: Vec<Expression>) -> Self {
         let offset = (
             first.offset().start,
-            rest.last().unwrap_or(&Callable::default()).offset().end,
+            rest.last().unwrap_or(&*first).offset().end,
         );
         Self {
             first,

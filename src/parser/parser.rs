@@ -1,9 +1,17 @@
-use crate::errors::parse_errors::{
-    EmptyBodyError, EmptyBodyErrorType, NonCallableInPipelineError, UnexpectedTokenError,
-};
-use crate::lexer::token::{Position, Token, TokenKind};
-use crate::parser::productions::*;
 use std::collections::HashMap;
+
+use crate::{
+    errors::parse_errors::{EmptyBodyError, EmptyBodyErrorType, UnexpectedTokenError},
+    lexer::token::{Position, Token, TokenKind},
+    parser::productions::{
+        AccessType, Accessed, ArrayLiteral, Assignable, Assignment, Body, Case, Contract, DataType,
+        Declaration, ElifStatement, Expression, FnCall, FnSignature, ForEach, ForLoop, Function,
+        Group, GroupAccess, GroupField, GroupInit, GroupMethod, GroupedExpression, IfStatement,
+        Indexable, IndexedId, InfixExpression, MapLiteral, MapType, MashStatement, Param, Pipeline,
+        PrefixExpression, Program, ReturnStatement, SetLiteral, SetType, Statement, VecType,
+        Vectorable,
+    },
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 enum Precedence {
@@ -18,8 +26,8 @@ enum Precedence {
     Prefix,     // not -
 }
 impl Precedence {
-    fn of(token_kind: TokenKind) -> Self {
-        match token_kind {
+    fn of(kind: TokenKind) -> Self {
+        match kind {
             TokenKind::Or => Self::LogicalOr,
             TokenKind::And => Self::LogicalAnd,
             TokenKind::Equal | TokenKind::NotEqual => Self::Equality,
@@ -752,7 +760,7 @@ impl<'a> Parser<'a> {
         self.expect_peek_is(TokenKind::Hi)?;
         let init = match self.parse_declaration()? {
             Statement::Declaration(decl) => decl,
-            _ => unreachable!("for loop declaration parsing always returns declaration"),
+            _ => unreachable!(r#"parse_for_loop: parse_declaration always returns a declaration"#),
         };
         let condition = self.parse_expression(Precedence::Lowest).and_then(|cond| {
             self.expect_peek_is(TokenKind::Terminator)?;
@@ -957,9 +965,11 @@ impl<'a> Parser<'a> {
                 | TokenKind::DashEqual
                 | TokenKind::MultiplyEqual
                 | TokenKind::DivideEqual
-                | TokenKind::ModuloEqual => {
-                    Ok(Statement::Assignment(self.parse_assignment(id.try_into()?)?))
-                }
+                | TokenKind::ModuloEqual => Ok(Statement::Assignment(self.parse_assignment(
+                    id.try_into().expect(
+                        r#"parse_ident_statement: ended at Ident/RBracket should be assignable"#,
+                    ),
+                )?)),
                 _ => {
                     self.expect_peek_is(TokenKind::Terminator)?;
                     Ok(Statement::Expression(id))
@@ -972,12 +982,12 @@ impl<'a> Parser<'a> {
                     Expression::Access(AccessType::Method(method)) => Ok(Statement::Method(method)),
                     Expression::Pipeline(pipe) => Ok(Statement::Pipeline(pipe)),
                     _ => unreachable!(
-                        r#"parse_ident_statement(): parse_ident_value() that returned at RParen is neither FnCall or MethodAccess"#
+                        r#"parse_ident_statement: returned at RParen is neither FnCall, MethodAccess, or Pipeline"#
                     ),
                 }
             }
             _ => unreachable!(
-                "parse_ident_statement(): parse_ident_value() did not return at RParen, Identifier, or RBracket, got {}",
+                r#"parse_ident_statement: parse_ident_expression should only return at RParen, Ident, or RBracket, got {}"#,
                 self.curr_tok().kind
             ),
         }
@@ -1206,10 +1216,10 @@ impl<'a> Parser<'a> {
         };
         let final_id = if self.peek_tok_is(TokenKind::LBracket) {
             self.advance(1);
-            let indices  = self.parse_array_literal().and_then(|a| match a {
+            let indices = self.parse_array_literal().and_then(|a| match a {
                 Expression::Array(a) => Ok(a.exprs),
                 _ => unreachable!(
-                    r#"parse_ident_accessor(): impossible for parse_array_literal() to return a non ArrayLiteral"#,
+                    r#"parse_ident_accessor: parse_array_literal only returns an ArrayLiteral"#,
                 ),
             })?;
             Accessed::IndexedId(IndexedId::new(idx_id, indices, self.curr_tok().offset.end))
@@ -1234,14 +1244,14 @@ impl<'a> Parser<'a> {
     /// ends with [TokenKind::RBracket] in current
     fn parse_indexed_expression(&mut self, expr: Expression) -> Result<Expression, ()> {
         let id = Indexable::try_from(expr).expect(
-            r#"parse_indexed_expression(): converting to indexable cannot fail as it was checked beforehand"#
+            r#"parse_indexed_expression: converting cannot fail as it was checked beforehand"#,
         );
         self.expect_peek_is(TokenKind::LBracket)
             .and_then(|tok| Ok(tok.pos(&self.line_starts)))?;
         let indices: Vec<Expression> = self.parse_array_literal().and_then(|a| match a {
             Expression::Array(a) => Ok(a.exprs),
             _ => unreachable!(
-                r#"parse_indexed_expression(): impossible for parse_array_literal() to return a non ArrayLiteral"#,
+                r#"parse_indexed_expression: parse_array_literal only returns an ArrayLiteral"#
             ),
         })?;
         Ok(Expression::Indexed(IndexedId::new(
@@ -1285,7 +1295,7 @@ impl<'a> Parser<'a> {
                         GroupAccess::new(Box::new(expr), accessed, std::marker::PhantomData),
                     ))),
                     _ => unreachable!(
-                        r#"parse_access_expression(): indexed result from parse_single_accessed() can only be a token or fn call"#
+                        r#"parse_access_expression: indexed result from parse_single_accessed can only be a Token or FnCall"#
                     ),
                 },
                 Accessed::FnCall(_) => Ok(Expression::Access(AccessType::Method(
@@ -1305,11 +1315,10 @@ impl<'a> Parser<'a> {
     /// starts with [TokenKind::Pipe] in peek
     /// ends with [TokenKind::RParen] in current
     fn parse_pipeline_expression(&mut self, first_value: Expression) -> Result<Expression, ()> {
-        let start = first_value.pos(&self.line_starts);
-        let mut rest: Vec<Callable> = vec![];
+        let mut rest: Vec<Expression> = vec![];
         while self.peek_tok_is(TokenKind::Pipe) {
             self.expect_peek_is(TokenKind::Pipe)?;
-            rest.push(self.parse_pipeline_callable(start)?);
+            rest.push(self.parse_expression_unit(Precedence::Lowest)?);
         }
         match &rest.len() {
             0 => Ok(first_value),
@@ -1317,40 +1326,6 @@ impl<'a> Parser<'a> {
                 Box::new(first_value),
                 rest,
             ))),
-        }
-    }
-
-    /// This parses a single item but ensures that only callables are parsed.
-    /// If the ident parsed isn't a callable (variable, field, indexed var,
-    /// etc.), this will create an error
-    ///
-    /// # Usage
-    /// Used in parsing [Pipeline]s where only callables are expected in between pipes
-    ///
-    /// starts with valid starting token for an [Expression] in peek.
-    /// ends with [TokenKind::RParen] in current
-    fn parse_pipeline_callable(&mut self, start: (usize, usize)) -> Result<Callable, ()> {
-        let callable = self.parse_expression_unit(Precedence::Lowest)?;
-        match self.curr_tok().kind {
-            // TODO: cloned callable
-            TokenKind::RParen => match callable.clone() {
-                Expression::FnCall(call) => Ok(Callable::Fn(call)),
-                Expression::Access(AccessType::Method(method)) => Ok(Callable::Method(method)),
-                Expression::GroupInit(init) => Ok(Callable::GroupInit(init)),
-                Expression::Grouped(grouped) => match *grouped.expr {
-                    Expression::FnCall(call) => Ok(Callable::Fn(call)),
-                    Expression::Access(AccessType::Method(method)) => Ok(Callable::Method(method)),
-                    Expression::GroupInit(init) => Ok(Callable::GroupInit(init)),
-                    Expression::Grouped(_) => unreachable!(
-                        r#"parse_pipeline_callable: grouped expression cannot contain another grouped expression by itself"#
-                    ),
-                    _ => Err(self.non_callable_in_pipeline_error(callable, start)),
-                },
-                _ => unreachable!(
-                    r#"parse_pipeline_callable: Expression that ended with RParen is not FnCall, MethodAccess, GroupInit, or GroupedExpression"#
-                ),
-            },
-            _ => Err(self.non_callable_in_pipeline_error(callable, start)),
         }
     }
 
@@ -1653,63 +1628,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Helper method to lift the expression value to a string relevant to
-    /// error reporting in [NonCallableInPipelineError]
-    fn expression_header_in_pipeline_error(&self, expr: &Expression) -> String {
-        match expr {
-            Expression::Token(res) => res.kind.to_string(),
-            Expression::Indexed(res) => match &res.id {
-                Indexable::Token(res) => {
-                    format!("indexed {}", res.kind.to_string().to_ascii_lowercase())
-                }
-                Indexable::Array(_) => "indexed array literal".into(),
-                Indexable::Set(_) => "indexed set literal".into(),
-                Indexable::Map(_) => "indexed map literal".into(),
-                Indexable::FnCall(_) => "indexed fn call".into(),
-                Indexable::Access(res) => match &res {
-                    AccessType::Field(_) => "field access".into(),
-                    AccessType::Method(_) => "method access".into(),
-                },
-                Indexable::Pipeline(_) => unreachable!(
-                    r#"NonCallableInPipeError::new(): A pipeline cannot exist within another pipeline"#
-                ),
-            },
-            Expression::Access(access) => match &access {
-                AccessType::Field(field) => {
-                    match field.accessed.last().unwrap_or(&Accessed::default()) {
-                        Accessed::Token(_) => "field access".into(),
-                        Accessed::IndexedId(_) => "indexed field access".into(),
-                        _ => unreachable!(
-                            r#"NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place"#
-                        ),
-                    }
-                }
-                AccessType::Method(method) => {
-                    match &method.accessed.last().unwrap_or(&Accessed::default()) {
-                        Accessed::FnCall(_) => "method access".into(),
-                        Accessed::IndexedId(_) => "indexed method access".into(),
-                        _ => unreachable!(
-                            r#"NonCallableInPipeError::new(): cannot be Method when the error is it isn't a callable in the first place"#
-                        ),
-                    }
-                }
-            },
-            Expression::FnCall(_) => unreachable!(
-                r#"NonCallableInPipeError::new(): cannot be FnCall when the error is it isn't a callable in the first place"#
-            ),
-            Expression::Infix(_) => "infix operation".into(),
-            Expression::Grouped(res) => self.expression_header_in_pipeline_error(&*res.expr),
-            Expression::Set(_) => "set literal".into(),
-            Expression::Map(_) => "map literal".into(),
-            Expression::Array(_) => "array literal".into(),
-            Expression::Prefix(_) => "prefix expression".into(),
-            Expression::Pipeline(_) => unreachable!(
-                r#"NonCallableInPipeError::new(): A pipeline cannot exist within another pipeline"#
-            ),
-            Expression::GroupInit(_) => "group initialization".into(),
-        }
-    }
-
     // }}}
 
     // ERROR METHODS {{{
@@ -1764,25 +1682,6 @@ impl<'a> Parser<'a> {
             expected,
             Some(error_header.header()),
             None,
-        )
-        .to_string()
-    }
-
-    fn non_callable_in_pipeline_error(
-        &mut self,
-        non_callable: Expression,
-        pipeline_start: (usize, usize),
-    ) {
-        self.error = NonCallableInPipelineError::new(
-            self.source
-                .lines()
-                .skip(pipeline_start.0)
-                .take(self.curr_tok().line(&self.line_starts) - pipeline_start.0 + 1)
-                .collect(),
-            pipeline_start,
-            non_callable.source_str(self.source),
-            &non_callable.to_formatted_string(self.source, 0),
-            &self.expression_header_in_pipeline_error(&non_callable),
         )
         .to_string()
     }
