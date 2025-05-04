@@ -208,8 +208,8 @@ impl<'a> Parser<'a> {
                 TokenKind::Hi => globals.push(self.parse_declaration()?),
                 _ => {
                     self.unexpected_token_error(
-                        Some("INVALID GLOBAL TOKEN"),
-                        None,
+                        Some("[INVALID GLOBAL TOKEN]"),
+                        Some("Can only declare functions, groups, contracts, or variables here"),
                         self.curr_tok(),
                         vec![
                             TokenKind::Fun,
@@ -218,7 +218,7 @@ impl<'a> Parser<'a> {
                             TokenKind::Hi,
                         ],
                     );
-                    break;
+                    return Err(());
                 }
             }
             if self.peek_tok_is(TokenKind::EOF) {
