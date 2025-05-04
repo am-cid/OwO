@@ -608,18 +608,13 @@ impl<'a> Parser<'a> {
     fn parse_declaration(&mut self) -> Result<Statement, ()> {
         let start = self.curr_tok();
         let id = self.expect_peek_is(TokenKind::Identifier)?;
-        let dtype = self
-            .peek_tok_is(TokenKind::Dash)
-            .then(|| {
-                self.advance(1);
-                self.peek_tok_is_type()
-                    .then(|| {
-                        self.advance(1);
-                        self.parse_data_type(self.curr_tok()).ok()
-                    })
-                    .flatten()
-            })
-            .flatten();
+        let dtype = if self.peek_tok_is(TokenKind::Dash) {
+            self.advance(1);
+            self.expect_peek_is_type()?;
+            Some(self.parse_data_type(self.curr_tok())?)
+        } else {
+            None
+        };
         let mutable = self
             .peek_tok_is(TokenKind::Bang)
             .then(|| self.advance(1))
@@ -628,7 +623,7 @@ impl<'a> Parser<'a> {
             .peek_tok_is(TokenKind::Question)
             .then(|| self.advance(1))
             .is_some();
-        self.expect_peek_is(TokenKind::Assign)?;
+        self.expect_peek_is_assign_op()?;
         let expr = self.parse_expression(Precedence::Lowest)?;
         let offset_end = self
             .expect_peek_is(TokenKind::Terminator)
@@ -936,27 +931,20 @@ impl<'a> Parser<'a> {
             | TokenKind::Default
             | TokenKind::RBrace => self.curr_tok().offset.end,
             _ => {
-                self.unexpected_token_error(
-                    None,
-                    None,
-                    self.peek_tok(),
-                    TokenKind::data_types()
-                        .into_iter()
-                        .chain(vec![TokenKind::Type, TokenKind::Default])
-                        .collect::<Vec<_>>(),
-                );
-                return Err(());
+                unreachable!("parse_case_body: did not end at Default, Type, data types, or RBrace")
             }
         };
         Ok(Body::new(statements, (start.offset.start, offset_end)))
     }
 
-    /// This parses three possible ident statements: assignments, function/method calls, pipelines
+    /// This parses four possible ident statements: assignments,
+    /// function/method calls, pipelines, and unused ident expressions
     /// ```
     /// aqua = 1~
     /// aqua.arms[2] = LONG~
     /// aqua.arms[1].punch()~
     /// aqua.scream() | voice_crack()~
+    /// aqua~
     /// ```
     /// starts with [TokenKind::Identifier] in current
     /// ends with [TokenKind::Terminator] in current
@@ -973,17 +961,8 @@ impl<'a> Parser<'a> {
                     Ok(Statement::Assignment(self.parse_assignment(id.try_into()?)?))
                 }
                 _ => {
-                    self.unexpected_token_error(
-                        None,
-                        None,
-                        self.peek_tok(),
-                        TokenKind::assign_ops()
-                            .iter()
-                            .map(|&kind| kind)
-                            .chain(vec![TokenKind::Pipe])
-                            .collect::<Vec<_>>()
-                    );
-                    Err(())
+                    self.expect_peek_is(TokenKind::Terminator)?;
+                    Ok(Statement::Expression(id))
                 }
             },
             TokenKind::RParen => {
@@ -1228,20 +1207,7 @@ impl<'a> Parser<'a> {
         let final_id = if self.peek_tok_is(TokenKind::LBracket) {
             self.advance(1);
             let indices  = self.parse_array_literal().and_then(|a| match a {
-                Expression::Array(a) => match a.exprs.len() {
-                    0 => Err(
-                        self.unexpected_token_error(
-                            Some("[EMPTY INDEX]"),
-                            Some(r#"To get an item from an iterable, put at least one index"#),
-                            self.curr_tok(),
-                            self.prefix_parse_fns
-                                .iter()
-                                .map(|(&kind, _)| kind)
-                                .collect()
-                        )
-                    ),
-                    _ => Ok(a.exprs),
-                },
+                Expression::Array(a) => Ok(a.exprs),
                 _ => unreachable!(
                     r#"parse_ident_accessor(): impossible for parse_array_literal() to return a non ArrayLiteral"#,
                 ),
