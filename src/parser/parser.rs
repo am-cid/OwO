@@ -360,7 +360,7 @@ impl<'a> Parser<'a> {
             self.allow_hanging_comma(TokenKind::RParen)?;
             if param.variadic && !self.peek_tok_is(TokenKind::RParen) {
                 self.unexpected_token_error(
-                    None,
+                    Some("[PARAMETER AFTER VARIADIC]"),
                     Some("Variadic parameter should be the last parameter."),
                     self.peek_tok(),
                     vec![TokenKind::RParen],
@@ -575,8 +575,8 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         self.unexpected_token_error(
-                            None,
-                            None,
+                            Some("[INVALID INNER DATA TYPE]"),
+                            Some("Only data types are allowed to be inner types"),
                             self.curr_tok(),
                             TokenKind::data_types(),
                         );
@@ -742,8 +742,8 @@ impl<'a> Parser<'a> {
             TokenKind::Hi => self.parse_for_loop(),
             TokenKind::Identifier => self.parse_for_each(),
             _ => Err(self.unexpected_token_error(
-                None,
-                None,
+                Some("[INVALID FOW INITIALZATION]"),
+                Some("Declare a variable (hi i = 1~ i<4~ i+1) or use an iterable (i in [1,2,3])"),
                 self.peek_tok(),
                 vec![TokenKind::Hi, TokenKind::Identifier],
             )),
@@ -1595,6 +1595,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // TODO: for all expect_peek methods, add header and context as parameters
     /// advances cursor 1 time if peek tok is eq to given
     /// adds an error otherwise
     fn expect_peek_is(&mut self, token_kind: TokenKind) -> Result<Token, ()> {
