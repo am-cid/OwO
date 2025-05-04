@@ -217,137 +217,6 @@ impl<'a> fmt::Display for NoMainError<'a> {
     }
 }
 
-//
-pub struct NonCallableInPipelineError<'a> {
-    pipeline_lines: Vec<&'a str>,
-    pipeline_pos: (usize, usize),
-    non_callable_str: &'a str,
-    non_callable_formatted_str: &'a str,
-    last_type: &'a str,
-}
-impl<'a> NonCallableInPipelineError<'a> {
-    /// - `pipeline_lines`: text separated by newline of the entire pipeline
-    /// including the error.
-    /// - `pipeline_pos`: starting buffer position of the entire pipeline.
-    /// - `non_callable_str`: unformatted non-callable in the pipeline that
-    /// caused the error.
-    /// - `non_callable_formatted_str`: the non-callable in pipeline formatted
-    /// for the error message
-    /// - `non_callable_line_end`: the last line of non_callable if it spans
-    /// multiple lines.
-    /// - `last_type`: the type of construct the non callable is for it to not
-    /// be allowed in the pipeline expression.
-    pub fn new(
-        pipeline_lines: Vec<&'a str>,
-        pipeline_pos: (usize, usize),
-        non_callable_str: &'a str,
-        non_callable_formatted_str: &'a str,
-        last_type: &'a str,
-    ) -> Self {
-        Self {
-            pipeline_lines,
-            pipeline_pos,
-            non_callable_str,
-            non_callable_formatted_str,
-            last_type,
-        }
-    }
-}
-impl<'a> fmt::Display for NonCallableInPipelineError<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ok_pipeline_lines = self
-            .pipeline_lines
-            .iter()
-            .take(self.pipeline_lines.len() - self.non_callable_str.lines().count() - 1)
-            .collect::<Vec<_>>();
-        println!("ok pipeline lines {ok_pipeline_lines:#?}");
-        let error_lines = self
-            .pipeline_lines
-            .iter()
-            .skip(ok_pipeline_lines.len())
-            .zip(self.non_callable_str.lines())
-            .collect::<Vec<_>>();
-        println!("error_lines ({}): {error_lines:#?}", error_lines.len());
-        write!(
-            f,
-            "{}",
-            format!(
-                r#"
-{header} {line_col_info}
-{context}
-{none:COL_WIDTH$} {pipe}
-{preview_ok}{none:COL_WIDTH$} {pipe} {padding}{error_msg}
-{preview_error}
-"#,
-                header = "[NON CALLABLE IN PIPELINE]".red(),
-                line_col_info = format!(
-                    "starting at line {} column {}",
-                    self.pipeline_pos.0 + 1,
-                    self.pipeline_pos.1 + 1,
-                )
-                .bold(),
-                context = format!(
-                    "{} {}",
-                    self.non_callable_formatted_str.bold().underline(),
-                    "is not callable so it's not allowed in pipeline expressions".italic()
-                ),
-                none = " ",
-                pipe = "|".blue(),
-                preview_ok = match ok_pipeline_lines.len() {
-                    0 => "".into(),
-                    _ =>
-                        ok_pipeline_lines
-                            .iter()
-                            .enumerate()
-                            .map(|(i, line)| {
-                                let line_no = (self.pipeline_pos.0 + 1 + i).to_string();
-                                let side_border = format!("{: >COL_WIDTH$} | ", line_no).blue();
-                                format!("{}{}", side_border, line,)
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                            + "\n",
-                },
-                padding = " ".repeat(
-                    error_lines
-                        .iter()
-                        .map(|(&line, _)| line)
-                        .collect::<Vec<_>>()
-                        .first()
-                        .unwrap_or(&&"")
-                        .chars()
-                        .take_while(|c| c.is_ascii_whitespace())
-                        .collect::<Vec<_>>()
-                        .len()
-                ),
-                error_msg = format!(">_< unexpected {}", self.last_type).red().italic(),
-                preview_error = error_lines
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (line, err))| {
-                        let line_no =
-                            (self.pipeline_pos.0 + 1 + ok_pipeline_lines.len() + i).to_string();
-                        let side_border = format!("{: >COL_WIDTH$} | ", line_no).blue();
-                        println!(
-                            "DEBUG: line {line} [{:?}] {} : {}",
-                            line.find(err),
-                            err,
-                            err.red()
-                        );
-                        format!(
-                            "{}{}",
-                            side_border,
-                            line.replace(err.trim(), err.red().as_str())
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
-            .trim()
-        )
-    }
-}
-
 pub struct UnexpectedTokenError<'a> {
     actual_str: &'a str,
     actual_kind: TokenKind,
@@ -367,6 +236,7 @@ impl<'a> UnexpectedTokenError<'a> {
         header: Option<&'a str>,
         context: Option<&'a str>,
     ) -> Self {
+        let line = actual.line(line_starts);
         Self {
             actual_str: &source[actual.offset.range()],
             actual_kind: actual.kind,
@@ -377,14 +247,11 @@ impl<'a> UnexpectedTokenError<'a> {
             expected_kinds,
             header,
             context,
-            line_text: source
-                .lines()
-                .nth(actual.line(line_starts))
-                .unwrap_or_default(),
-            line_before_text: source
-                .lines()
-                .nth(actual.line(line_starts) - 1)
-                .unwrap_or_default(),
+            line_text: source.lines().nth(line).unwrap_or_default(),
+            line_before_text: match line {
+                0 => "".into(),
+                _ => source.lines().nth(line - 1).unwrap_or_default(),
+            },
         }
     }
 }
@@ -444,7 +311,10 @@ impl<'a> fmt::Display for UnexpectedTokenError<'a> {
                 .bold(),
                 none = " ",
                 pipe = "|".blue(),
-                line_before = self.actual_buffer_pos.0 - 1,
+                line_before = match self.actual_buffer_pos.0 - 1 {
+                    0 => "".into(),
+                    rest => rest.to_string(),
+                },
                 line_before_text = self.line_before_text,
                 line = self.actual_buffer_pos.0,
                 line_text = self.line_text,

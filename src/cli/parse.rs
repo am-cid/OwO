@@ -65,7 +65,10 @@ impl Command for Parse {
         let lexer = Lexer::new(source);
         lexer.debug_tokens();
         if lexer.errors.len() > 0 {
-            lexer.errors.into_iter().for_each(|err| println!("{}", err));
+            lexer
+                .errors
+                .into_iter()
+                .for_each(|err| println!("{}", err.source_string(&lexer.source)));
             return Err(format!("Failed to tokenize file: {}", trimmed_path));
         }
         let mut p = Parser::new(

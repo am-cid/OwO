@@ -1,6 +1,9 @@
-use crate::lexer::{
-    lexer::Lexer,
-    token::{Offset, Position, Token, TokenKind},
+use crate::{
+    errors::lex_errors::LexerErrorKind,
+    lexer::{
+        lexer::Lexer,
+        token::{Offset, Position, Token, TokenKind},
+    },
 };
 use std::{collections::HashMap, vec};
 
@@ -90,7 +93,7 @@ fn individual_tokens() {
             "unexpected errors:\n{}",
             l.errors
                 .into_iter()
-                .map(|e| e.to_string())
+                .map(|e| e.source_string(&l.source))
                 .collect::<Vec<String>>()
                 .join("\n")
         );
@@ -399,9 +402,12 @@ fn lexer_errors() {
     assert!(l.tokens.len() == 0);
     let first_err = l.errors.first().unwrap();
     assert!(
-        first_err.to_string().starts_with("[UNKNOWN TOKEN '@']"),
+        match first_err.kind {
+            LexerErrorKind::Unknown(_) => true,
+            _ => false,
+        },
         "Expected [UNKNOWN TOKEN '@'] error\nGot {}",
-        first_err,
+        first_err.source_string(&l.source),
     );
 
     let l = Lexer::new(r#"""#.to_string());
@@ -409,9 +415,12 @@ fn lexer_errors() {
     assert!(l.tokens.len() == 0);
     let first_err = l.errors.first().unwrap();
     assert!(
-        first_err.to_string().starts_with("[UNCLOSED STRING]"),
+        match first_err.kind {
+            LexerErrorKind::UnclosedString(_) => true,
+            _ => false,
+        },
         "Expected [UNCLOSED STRING] error\nGot {}",
-        first_err,
+        first_err.source_string(&l.source),
     );
 
     let l = Lexer::new("'".to_string());
@@ -419,8 +428,11 @@ fn lexer_errors() {
     assert!(l.tokens.len() == 0);
     let first_err = l.errors.first().unwrap();
     assert!(
-        first_err.to_string().starts_with("[UNCLOSED CHARACTER]"),
+        match first_err.kind {
+            LexerErrorKind::UnclosedChar(_) => true,
+            _ => false,
+        },
         "Expected [UNCLOSED CHARACTER] error\nGot {}",
-        first_err,
+        first_err.source_string(&l.source),
     );
 }

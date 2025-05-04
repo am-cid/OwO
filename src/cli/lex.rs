@@ -67,7 +67,7 @@ impl Command for Lex {
         lexer.debug_tokens();
         if lexer.errors.len() > 0 {
             for error in lexer.errors {
-                println!("{}", error);
+                println!("{}", error.source_string(&lexer.source));
             }
         }
         Ok(())

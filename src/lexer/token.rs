@@ -272,6 +272,7 @@ impl TokenKind {
     }
     pub fn data_types() -> Vec<Self> {
         vec![
+            Self::Type,
             Self::Chan,
             Self::Kun,
             Self::Senpai,
