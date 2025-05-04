@@ -1,7 +1,75 @@
 use crate::{
     lexer::{lexer::Lexer, token::TokenKind},
     parser::{parser::Parser, productions::Production},
+    utils::string::StringExt,
 };
+
+/// asserts that passed in formatted source is equal to how the parser formats it
+fn assert_already_formatted(formatted: &'static str) -> () {
+    assert_formatted_eq(formatted.to_string(), formatted)
+}
+/// asserts that source, which will be formatted by parser, is equal to the passed in formatted
+/// string
+fn assert_formatted_eq(source: String, formatted: &'static str) -> () {
+    let lexer = Lexer::new(source);
+    let mut parser = Parser::new(
+        &lexer.source,
+        &lexer.line_starts,
+        lexer
+            .tokens
+            .into_iter()
+            .filter(|tok| match tok.kind {
+                TokenKind::Whitespace
+                | TokenKind::Newline
+                | TokenKind::Tab
+                | TokenKind::CarriageReturn
+                | TokenKind::Comment
+                | TokenKind::EOF => false,
+                _ => true,
+            })
+            .collect(),
+    );
+    let _ = parser.parse_program();
+    assert_eq!(
+        formatted,
+        parser.program.to_formatted_string(&lexer.source, 0),
+        "expected:\n{}\n===\nactual:\n{}",
+        formatted,
+        parser.program.to_formatted_string(&lexer.source, 0),
+    )
+}
+
+/// asserts that the passed in source string is an error with the same header
+/// as the given header.
+fn assert_error(error_header: &str, source: &str) {
+    let lexer = Lexer::new(source.to_string());
+    let mut parser = Parser::new(
+        &lexer.source,
+        &lexer.line_starts,
+        lexer
+            .tokens
+            .into_iter()
+            .filter(|tok| match tok.kind {
+                TokenKind::Whitespace
+                | TokenKind::Newline
+                | TokenKind::Tab
+                | TokenKind::CarriageReturn
+                | TokenKind::Comment
+                | TokenKind::EOF => false,
+                _ => true,
+            })
+            .collect(),
+    );
+    match parser.parse_program() {
+        Ok(()) => assert!(false),
+        Err(()) => assert!(
+            parser.error.starts_with(&error_header.red()),
+            "Expected {}\nGot {}",
+            error_header,
+            parser.error
+        ),
+    }
+}
 
 #[test]
 fn hello_world() {
@@ -38,23 +106,36 @@ fn declaration_and_assignment() {
     let source = r#"
     fun main-san() {
         hi aqua-chan=1~hi aqua-kun=2.0~
+        hi aqua=1~hi aqua=2.0~
         hi aqua-sama=fax~hi aqua-senpai="string"~
+        hi aqua=fax~hi aqua="string"~
         hi aqua-kouhai='c'~hi aqua-san=nuww~
+        hi aqua='c'~hi aqua=nuww~
         hi aqua-dono=any(1,2,3,)~hi aqua-Class=Class(4,5,6,)~
-        hi aqua-chan=6~aqua=7~
+        hi aqua=any(1,2,3,)~hi aqua=Class(4,5,6,)~
+        hi aqua-chan=6~hi aqua=6~aqua=7~
         aqua.hands=8~aqua.scream().pitch=9~
     }"#;
     let formatted = r#"
 fun main-san() {
     hi aqua-chan = 1~
     hi aqua-kun = 2.0~
+    hi aqua = 1~
+    hi aqua = 2.0~
     hi aqua-sama = fax~
     hi aqua-senpai = "string"~
+    hi aqua = fax~
+    hi aqua = "string"~
     hi aqua-kouhai = 'c'~
     hi aqua-san = nuww~
+    hi aqua = 'c'~
+    hi aqua = nuww~
     hi aqua-dono = any(1, 2, 3)~
     hi aqua-Class = Class(4, 5, 6)~
+    hi aqua = any(1, 2, 3)~
+    hi aqua = Class(4, 5, 6)~
     hi aqua-chan = 6~
+    hi aqua = 6~
     aqua = 7~
     aqua.hands = 8~
     aqua.scream().pitch = 9~
@@ -472,37 +553,179 @@ fun main-san() {
     assert_already_formatted(formatted);
 }
 
-/// asserts that passed in formatted source is equal to how the parser formats it
-fn assert_already_formatted(formatted: &'static str) -> () {
-    assert_formatted_eq(formatted.to_string(), formatted)
-}
-/// asserts that source, which will be formatted by parser, is equal to the passed in formatted
-/// string
-fn assert_formatted_eq(source: String, formatted: &'static str) -> () {
-    let lexer = Lexer::new(source);
-    let mut parser = Parser::new(
-        &lexer.source,
-        &lexer.line_starts,
-        lexer
-            .tokens
-            .into_iter()
-            .filter(|tok| match tok.kind {
-                TokenKind::Whitespace
-                | TokenKind::Newline
-                | TokenKind::Tab
-                | TokenKind::CarriageReturn
-                | TokenKind::Comment
-                | TokenKind::EOF => false,
-                _ => true,
-            })
-            .collect(),
+#[test]
+fn error_no_main() {
+    assert_error(
+        &"[NO MAIN FUNCTION]".red(),
+        r#"
+fun func-san() {
+    pwint("hewwo world~")~
+}"#,
     );
-    let _ = parser.parse_program();
-    assert_eq!(
-        formatted,
-        parser.program.to_formatted_string(&lexer.source, 0),
-        "expected:\n{}\n===\nactual:\n{}",
-        formatted,
-        parser.program.to_formatted_string(&lexer.source, 0),
-    )
+}
+
+#[test]
+fn error_empty_function_body() {
+    assert_error(
+        &"[EMPTY FUNCTION BODY]".red(),
+        r#"
+fun main-san() {}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_if_body() {
+    assert_error(
+        &"[EMPTY IF BODY]".red(),
+        r#"
+fun main-san() { 
+    iwf fax {}
+}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_for_body() {
+    assert_error(
+        &"[EMPTY FOR BODY]".red(),
+        r#"
+fun main-san() { 
+    fow i in [1,2,3,4,5] {}
+}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_group_body() {
+    assert_error(
+        &"[EMPTY GROUP BODY]".red(),
+        r#"
+fun main-san() { pwint()~ }
+gwoup Sample {}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_mash_case_body() {
+    assert_error(
+        &"[EMPTY MASH BODY]".red(),
+        r#"
+fun main-san() {
+    mash val {}
+}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_mash_body() {
+    assert_error(
+        &"[EMPTY MASH CASE BODY]".red(),
+        r#"
+fun main-san() {
+    mash val {
+    chan:
+    }
+}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_method_body() {
+    assert_error(
+        &"[EMPTY METHOD BODY]".red(),
+        r#"
+fun main-san() { pwint()~ }
+fun Group method-san() {}
+"#,
+    );
+}
+
+#[test]
+fn error_empty_contract_body() {
+    assert_error(
+        &"[EMPTY CONTRACT BODY]".red(),
+        r#"
+fun main-san() { pwint()~ }
+contwact Interface {}
+"#,
+    );
+}
+
+#[test]
+fn error_param_after_variadic() {
+    assert_error(
+        &format!(
+            "{} {}",
+            "[PARAMETER AFTER VARIADIC]".red(),
+            "at line 1 from column 38 to 41".bold(),
+        ),
+        r#"fun main-san(arg-chan, arg2-chan..., arg3-chan) {
+    pwint()~
+}"#,
+    );
+}
+
+#[test]
+fn error_invalid_global_token() {
+    let header = "[INVALID GLOBAL TOKEN]".red();
+    let asserter = |text: &str| assert_error(&header, text);
+    let invalids = vec![
+        "aqua", "Aqua", "chan", "kun", "senpai", "san", "sama", "dono", "+", "-", "*", "/", "%",
+        "+=", "-=", "*=", "/=", "%=", "<", "<=", ">=", ">", "and", "or", "not", "==", "!=", "=",
+        "(", ")", "[", "]", "{", "}", ".", "?", "!", "...", ",", ":", "#", "|", "~", "main",
+        "wetuwn", "iwf", "ewse", "ewif", "mash", "default", "fow", "bweak", "continue", "in", "1",
+        "1.1", "fax", "cap", "\"cap\"", "'a'", "nuww",
+    ];
+    for invalid in invalids {
+        asserter(invalid);
+    }
+}
+
+#[test]
+fn error_invalid_inner_data_type() {
+    let header = "[INVALID INNER DATA TYPE]".red();
+    let mut initial_text = "hi aqua-chan{".to_owned();
+    let mut asserter = |text: &str| {
+        assert_error(&header, {
+            initial_text.push_str(text);
+            &initial_text
+        });
+    };
+    let invalids = vec![
+        "aqua", "+", "-", "*", "/", "%", "+=", "-=", "*=", "/=", "%=", "<", "<=", ">=", ">", "and",
+        "or", "not", "==", "!=", "=", "(", ")", "[", "]", "{", "}", ".", "?", "!", "...", ",", ":",
+        "#", "|", "~", "main", "wetuwn", "iwf", "ewse", "ewif", "mash", "default", "fow", "bweak",
+        "continue", "in", "1", "1.1", "fax", "cap", "\"cap\"", "'a'", "nuww",
+    ];
+    for invalid in invalids {
+        asserter(invalid);
+    }
+}
+
+#[test]
+fn error_invalid_for_initialization() {
+    let header = "[INVALID FOW INITIALZATION]".red();
+    let mut initial_text = "fun main-san(){fow ".to_owned();
+    let mut asserter = |text: &str| {
+        assert_error(&header, {
+            initial_text.push_str(text);
+            &initial_text
+        });
+    };
+    let invalids = vec![
+        "Aqua", "chan", "kun", "senpai", "san", "sama", "dono", "+", "-", "*", "/", "%", "+=",
+        "-=", "*=", "/=", "%=", "<", "<=", ">=", ">", "and", "or", "not", "==", "!=", "=", "(",
+        ")", "[", "]", "{", "}", ".", "?", "!", "...", ",", ":", "#", "|", "~", "main", "fun",
+        "gwoup", "contwact", "wetuwn", "iwf", "ewse", "ewif", "mash", "default", "fow", "bweak",
+        "continue", "in", "1", "1.1", "fax", "cap", "\"cap\"", "'a'", "nuww",
+    ];
+    for invalid in invalids {
+        asserter(invalid);
+    }
 }
