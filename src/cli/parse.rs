@@ -58,10 +58,7 @@ impl Command for Parse {
         Ok(())
     }
     fn exec(&self) -> Result<(), String> {
-        let abs_path = self.path.display().to_string();
-        let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
-        // read file
-        let source = fs::read_to_string(trimmed_path).unwrap_or_default();
+        let source: String = fs::read_to_string(self.path.as_path()).unwrap_or_default();
         let lexer = Lexer::new(source);
         lexer.debug_tokens();
         if lexer.errors.len() > 0 {
@@ -69,7 +66,7 @@ impl Command for Parse {
                 .errors
                 .into_iter()
                 .for_each(|err| println!("{}", err.source_string(&lexer.source)));
-            return Err(format!("Failed to tokenize file: {}", trimmed_path));
+            return Err(format!("Failed to tokenize file: {}", self.path.display()));
         }
         let mut p = Parser::new(
             &lexer.source,
@@ -95,7 +92,7 @@ impl Command for Parse {
             )),
             Err(()) => {
                 println!("{}", p.error);
-                Err(format!("Failed to parse file: {}", trimmed_path))
+                Err(format!("Failed to parse file: {}", self.path.display()))
             }
         }
     }

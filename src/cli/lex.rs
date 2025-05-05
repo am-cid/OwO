@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     cli::commands::Command,
-    lexer::{lexer::Lexer, token::Offset},
+    lexer::lexer::Lexer,
     utils::{path::PathExt, string::StringExt},
 };
 
@@ -51,9 +51,7 @@ impl Command for Lex {
         Ok(())
     }
     fn exec(&self) -> Result<(), String> {
-        let abs_path = self.path.display().to_string();
-        let trimmed_path = abs_path.strip_prefix(r#"\\?\"#).unwrap_or(&abs_path);
-        let source: String = fs::read_to_string(trimmed_path).unwrap_or_default();
+        let source: String = fs::read_to_string(self.path.as_path()).unwrap_or_default();
         let max_line_len = source
             .lines()
             .map(|l| l.chars().count())
