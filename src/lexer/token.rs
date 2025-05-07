@@ -302,6 +302,19 @@ impl TokenKind {
             Self::Modulo,
         ]
     }
+    pub fn is_type(&self) -> bool {
+        matches!(
+            self,
+            Self::Type
+                | Self::Chan
+                | Self::Kun
+                | Self::Senpai
+                | Self::Kouhai
+                | Self::San
+                | Self::Sama
+                | Self::Dono
+        )
+    }
 }
 
 // }}}

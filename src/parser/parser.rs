@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use crate::{
-    errors::parse_errors::{EmptyBodyError, EmptyBodyErrorType, UnexpectedTokenError},
+    errors::parse_errors::{BodyType, EmptyBodyError, ParserError, UnexpectedTokenError},
     lexer::token::{Position, Token, TokenKind},
     parser::productions::{
         AccessType, Accessed, ArrayLiteral, Assignable, Assignment, Body, Case, Contract, DataType,
@@ -12,6 +12,10 @@ use crate::{
         Vectorable,
     },
 };
+
+/// Max amount of errors till recovery strategies starts discarding tokens and
+/// assume its ok
+const MAX_LOCAL_ERROR_COUNT: usize = 3;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 enum Precedence {
@@ -43,30 +47,30 @@ impl Precedence {
     }
 }
 
-pub struct Parser<'a> {
+#[derive(Debug)]
+pub struct Parser<'src> {
     pub program: Program,
-    pub error: String,
-    source: &'a str,
-    line_starts: &'a Vec<usize>,
+    pub errors: Vec<ParserError<'src>>,
+    source: &'src str,
+    line_starts: &'src Vec<usize>,
     tokens: Vec<Token>,
     pos: usize,
-    prefix_parse_fns: HashMap<TokenKind, for<'b> fn(&mut Self) -> Result<Expression, ()>>,
-    infix_parse_fns:
-        HashMap<TokenKind, for<'b> fn(&mut Self, Expression) -> Result<Expression, ()>>,
-    body_parse_fns: HashMap<TokenKind, for<'b> fn(&mut Self) -> Result<Statement, ()>>,
+    prefix_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Expression, ()>>,
+    infix_parse_fns: HashMap<TokenKind, fn(&mut Self, Expression) -> Result<Expression, ()>>,
+    body_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Statement, ()>>,
 }
-impl<'a> Parser<'a> {
+impl<'src> Parser<'src> {
     // TODO: expected values for some are inaccurate. For example:
     // - parse_expression: only expects Terminator when a Dot or Pipe can
     // follow it as well.
     // - and more... i forgot the rest sorry...
-    pub fn new(source: &'a str, line_starts: &'a Vec<usize>, tokens: Vec<Token>) -> Self {
+    pub fn new(source: &'src str, line_starts: &'src Vec<usize>, tokens: Vec<Token>) -> Self {
         let mut parser = Self {
             program: Program::default(),
             tokens,
             source,
             line_starts,
-            error: "".to_string(),
+            errors: vec![],
             pos: 0,
             prefix_parse_fns: HashMap::new(),
             infix_parse_fns: HashMap::new(),
@@ -122,7 +126,7 @@ impl<'a> Parser<'a> {
         // starting tokens for body statements.
         self.register_body(vec![
             // STATEMENTS
-            (TokenKind::Hi, Self::parse_declaration),
+            (TokenKind::Hi, Self::parse_declaration_statement),
             (TokenKind::Identifier, Self::parse_ident_statement),
             (TokenKind::Iwf, Self::parse_if),
             (TokenKind::Mash, Self::parse_mash),
@@ -156,7 +160,7 @@ impl<'a> Parser<'a> {
     // MOVEMENT METHODS {{{
 
     /// advances cursor n times
-    fn advance(&mut self, n: usize) -> () {
+    fn advance(&mut self, n: usize) {
         for _ in 0..n {
             if self.curr_tok().kind == TokenKind::EOF {
                 return;
@@ -165,12 +169,30 @@ impl<'a> Parser<'a> {
         }
     }
     /// reverses cursor n times
-    fn reverse(&mut self, n: usize) -> () {
+    fn reverse(&mut self, n: usize) {
         for _ in 0..n {
             if self.curr_tok().kind == TokenKind::EOF {
                 return;
             }
             self.pos -= 1;
+        }
+    }
+    /// advances cursor n times if the condition is met
+    fn advance_if<F>(&mut self, n: usize, mut condition: F)
+    where
+        F: FnMut(&mut Self) -> bool,
+    {
+        if condition(self) {
+            self.advance(n);
+        }
+    }
+    /// advances cursor until the condition is met
+    fn advance_until<F>(&mut self, mut condition: F)
+    where
+        F: FnMut(&mut Self) -> bool,
+    {
+        while !condition(self) && self.curr_tok().kind != TokenKind::EOF {
+            self.advance(1);
         }
     }
 
@@ -187,6 +209,16 @@ impl<'a> Parser<'a> {
     fn peek_tok(&self) -> Token {
         self.tokens
             .get(self.pos + 1)
+            .map(|&tok| tok)
+            .unwrap_or_default()
+    }
+    /// Peeks the token `n` after the peek
+    /// ```
+    /// assert_eq!(self.peek_tok(), self.peek_tok_nth(0));
+    /// ```
+    fn peek_tok_nth(&self, n: usize) -> Token {
+        self.tokens
+            .get(self.pos + 1 + n)
             .map(|&tok| tok)
             .unwrap_or_default()
     }
@@ -207,16 +239,16 @@ impl<'a> Parser<'a> {
         while !self.curr_tok_is(TokenKind::EOF) {
             match self.curr_tok().kind {
                 TokenKind::Fun => match self.peek_tok().kind {
-                    TokenKind::Main => main = Some(self.parse_function()?),
-                    TokenKind::Type => methods.push(self.parse_method()?),
-                    _ => functions.push(self.parse_function()?),
+                    TokenKind::Main => main = Some(self.parse_function()),
+                    TokenKind::Type => methods.push(self.parse_method()),
+                    _ => functions.push(self.parse_function()),
                 },
-                TokenKind::Group => groups.push(self.parse_group()?),
-                TokenKind::Contract => contracts.push(self.parse_contract()?),
-                TokenKind::Hi => globals.push(self.parse_declaration()?),
+                TokenKind::Group => groups.push(self.parse_group()),
+                TokenKind::Contract => contracts.push(self.parse_contract()),
+                TokenKind::Hi => globals.push(self.parse_declaration_statement()?),
                 _ => {
                     self.unexpected_token_error(
-                        Some("[INVALID GLOBAL TOKEN]"),
+                        Some("INVALID GLOBAL TOKEN"),
                         Some("Can only declare functions, groups, contracts, or variables here"),
                         self.curr_tok(),
                         vec![
@@ -244,230 +276,429 @@ impl<'a> Parser<'a> {
             self.source,
             end,
         )
-        .map_err(|e| self.error = e.to_string())?;
+        .map_err(|e| self.errors.push(ParserError::NoMain(e)))?;
         Ok(())
     }
 
     /// starts with [TokenKind::Fun] in current
     /// ends with [TokenKind::RBrace] in current
-    fn parse_function(&mut self) -> Result<Function, ()> {
+    fn parse_method(&mut self) -> GroupMethod {
         let start = self.curr_tok();
-        let id = self.expect_peek_is_in(&[TokenKind::Identifier, TokenKind::Main])?;
-        self.expect_peek_is(TokenKind::Dash)?;
-        let dtype = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
-        self.expect_peek_is(TokenKind::LParen)?;
-        let params = self.parse_params()?;
-        self.expect_peek_is(TokenKind::LBrace)?;
-        let body = self.parse_body(EmptyBodyErrorType::Fn)?;
-        Ok(Function::new(
-            id,
-            dtype,
-            params,
-            body,
-            (start.offset.start, self.curr_tok().offset.end),
-        ))
-    }
-
-    /// starts with [TokenKind::Fun] in current
-    /// ends with [TokenKind::RBrace] in current
-    fn parse_method(&mut self) -> Result<GroupMethod, ()> {
-        let start = self.curr_tok();
-        let group = self.expect_peek_is_type()?;
+        let group = self
+            .expect_peek_is_type_()
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::Identifier,
+                    TokenKind::Bang,
+                    TokenKind::Dash,
+                    TokenKind::LParen,
+                    TokenKind::LBrace,
+                ]) || parser.peek_tok_is_type()
+            })
+            .finish();
         let mutable = self
             .peek_tok_is(TokenKind::Bang)
             .then(|| self.advance(1))
             .is_some();
-        let id = self.expect_peek_is(TokenKind::Identifier)?;
-        self.expect_peek_is(TokenKind::Dash)?;
-        let dtype = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
-        self.expect_peek_is(TokenKind::LParen)?;
-        let params = self.parse_params()?;
-        self.expect_peek_is(TokenKind::LBrace)?;
-        let body = self.parse_body(EmptyBodyErrorType::Method)?;
-        Ok(GroupMethod::new(
-            id,
+        let function = self.parse_function();
+        GroupMethod::new(
+            function.id,
             group,
             mutable,
+            function.dtype,
+            function.params,
+            function.body,
+            (start.offset.start, self.curr_tok().offset.end),
+        )
+    }
+
+    /// starts with [TokenKind::Fun] in current
+    /// ends with [TokenKind::RBrace] in current
+    fn parse_function(&mut self) -> Function {
+        let start_offset = self.curr_tok().offset.start;
+        let (id, error_count) = self
+            .expect_peek_is_in_(&[TokenKind::Identifier, TokenKind::Main])
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::Dash, TokenKind::LParen, TokenKind::LBrace])
+                    || parser.peek_tok_is_type()
+            })
+            .error_header("MISSING FUNCTION NAME")
+            .finish_with_error_count();
+
+        let ((), error_count) = self
+            .expect_peek_is_(TokenKind::Dash)
+            .recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::LParen, TokenKind::LBrace])
+                    || parser.peek_tok_is_type()
+            })
+            .limit_errors(error_count)
+            .error_context("Need a dash before declaring the type.")
+            .finish_with_error_count();
+
+        let (dtype, error_count) = self
+            .expect_peek_is_type_()
+            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                // follow set
+                parser.peek_tok_is_in(&[TokenKind::LParen, TokenKind::LBrace])
+                // end of dtypes
+                || parser.curr_tok_is_in(&[TokenKind::RBracket, TokenKind::RBrace])
+                || parser.curr_tok_is_type()
+            })
+            .limit_errors(error_count)
+            .error_header("INVALID TYPE")
+            .error_context("User defined types must start with a capital letter.")
+            .finish_with_error_count();
+
+        let params = self
+            .expect_peek_is_(TokenKind::LParen)
+            .ok_then(|parser, _| Ok(parser.parse_params()))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::LBrace]) || parser.curr_tok_is(TokenKind::RParen)
+            })
+            .limit_errors(error_count)
+            .error_header("MISSING OPENING ( FOR PARAMETERS")
+            .finish();
+
+        let body = self
+            .expect_peek_is_(TokenKind::LBrace)
+            .ok_then(|parser, _| Ok(parser.parse_body(BodyType::Fn)))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::Hi,
+                    TokenKind::Fun,
+                    TokenKind::Group,
+                    TokenKind::Contract,
+                ]) || parser.curr_tok_is(TokenKind::RBrace)
+            })
+            .limit_errors(error_count)
+            .finish();
+
+        Function::new(
+            id,
             dtype,
             params,
             body,
-            (start.offset.start, self.curr_tok().offset.end),
-        ))
+            (start_offset, self.curr_tok().offset.end),
+        )
+    }
+
+    /// starts with [TokenKind::LParen] in current
+    /// ends with [TokenKind::RParen] in current
+    fn parse_params(&mut self) -> Vec<Param> {
+        let mut params: Vec<Param> = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            let param = self.parse_param();
+            self.allow_hanging_comma(TokenKind::RParen);
+            if param.variadic {
+                self.expect_peek_is_(TokenKind::RParen)
+                    .recover()
+                    .skip_until_peek_is(TokenKind::RParen)
+                    .error_header("VARIADIC PARAMETER NOT LAST")
+                    .error_context("Variadic parameter should be the last parameter.")
+                    .finish()
+            }
+            params.push(param);
+        }
+        self.advance(1);
+        params
+    }
+
+    /// starts with [TokenKind::Identifier] in peek
+    /// ends with [DataType]'s last token in current
+    fn parse_param(&mut self) -> Param {
+        let (id, error_count) = self
+            .expect_peek_is_(TokenKind::Identifier)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_one_if(|parser| {
+                !parser.peek_tok_is(TokenKind::Dash) && parser.peek_tok_nth(1).kind.is_type()
+            })
+            .finish_with_error_count();
+        let ((), error_count) = self
+            .expect_peek_is_(TokenKind::Dash)
+            .recover()
+            .skip_one_if(|parser| {
+                !parser.peek_tok_is_type() && parser.peek_tok_nth(1).kind == TokenKind::Ellipsis
+            })
+            .limit_errors(error_count)
+            .finish_with_error_count();
+        let dtype = self
+            .expect_peek_is_type_()
+            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .or_recover()
+            .skip_until_peek_is_in(&[TokenKind::Ellipsis, TokenKind::Comma, TokenKind::RParen])
+            .limit_errors(error_count)
+            .finish();
+        let variadic = self
+            .peek_tok_is(TokenKind::Ellipsis)
+            .then(|| self.advance(1))
+            .is_some();
+        Param::new(
+            id,
+            dtype,
+            variadic,
+            (id.offset.start, self.curr_tok().offset.end),
+        )
     }
 
     /// starts with [TokenKind::Group] in current
     /// ends with [TokenKind::RBrace] in current
-    fn parse_group(&mut self) -> Result<Group, ()> {
+    fn parse_group(&mut self) -> Group {
         let start = self.curr_tok();
-        let id = self.expect_peek_is(TokenKind::Type)?;
-        self.expect_peek_is(TokenKind::LBrace)?;
-        // disallow empty bodies
-        if self.peek_tok_is(TokenKind::RBrace) {
+        let id = self
+            .expect_peek_is_(TokenKind::Type)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until_peek_is(TokenKind::LBrace)
+            .finish();
+        let found_opening = self
+            .expect_peek_is_(TokenKind::LBrace)
+            .ignore()
+            .finish_result()
+            .is_ok();
+        let fields = if found_opening && self.peek_tok_is(TokenKind::RBrace) {
             self.empty_body_error(
                 self.curr_tok(),
                 self.peek_tok(),
                 vec![TokenKind::Identifier],
-                EmptyBodyErrorType::Group,
+                BodyType::Group,
                 self.source
                     .lines()
                     .nth(self.peek_tok().line(&self.line_starts))
                     .unwrap_or_default(),
             );
             self.advance(1);
-            return Err(());
-        }
-        let fields = self.parse_fields()?;
-        Ok(Group::new(
-            id,
-            fields,
-            (start.offset.start, self.curr_tok().offset.end),
-        ))
-    }
-
-    /// starts with [TokenKind::Contract] in current
-    /// ends with [TokenKind::RBrace] in current
-    fn parse_contract(&mut self) -> Result<Contract, ()> {
-        let start = self.curr_tok();
-        let id = self.expect_peek_is(TokenKind::Type)?;
-        self.expect_peek_is(TokenKind::LBrace)?;
-        if self.peek_tok_is(TokenKind::RBrace) {
-            self.empty_body_error(
-                self.curr_tok(),
-                self.peek_tok(),
-                vec![TokenKind::Identifier],
-                EmptyBodyErrorType::Contract,
-                self.source
-                    .lines()
-                    .nth(self.peek_tok().line(&self.line_starts))
-                    .unwrap_or_default(),
-            );
-            return Err(());
-        }
-        let mut signatures: Vec<FnSignature> = vec![];
-        while !self.peek_tok_is(TokenKind::RBrace) {
-            signatures.push(self.parse_fn_signature()?);
-        }
-        self.expect_peek_is(TokenKind::RBrace)?;
-        Ok(Contract::new(
-            id,
-            signatures,
-            (start.offset.start, self.curr_tok().offset.end),
-        ))
-    }
-
-    /// starts with [TokenKind::LParen] in current
-    /// ends with [TokenKind::RParen] in current
-    fn parse_params(&mut self) -> Result<Vec<Param>, ()> {
-        let mut params: Vec<Param> = vec![];
-        while !self.peek_tok_is(TokenKind::RParen) {
-            let param = self.parse_param()?;
-            self.allow_hanging_comma(TokenKind::RParen)?;
-            if param.variadic && !self.peek_tok_is(TokenKind::RParen) {
-                self.unexpected_token_error(
-                    Some("[PARAMETER AFTER VARIADIC]"),
-                    Some("Variadic parameter should be the last parameter."),
-                    self.peek_tok(),
-                    vec![TokenKind::RParen],
-                );
-                return Err(());
-            }
-            params.push(param);
-        }
-        self.advance(1);
-        Ok(params)
-    }
-
-    /// starts with [TokenKind::Identifier] in peek
-    /// ends with [DataType]'s last token in current
-    fn parse_param(&mut self) -> Result<Param, ()> {
-        let id = self.expect_peek_is(TokenKind::Identifier)?;
-        self.expect_peek_is(TokenKind::Dash)?;
-        let dtype = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
-        let variadic = self
-            .peek_tok_is(TokenKind::Ellipsis)
-            .then(|| self.advance(1))
-            .is_some();
-        Ok(Param::new(
-            id,
-            dtype,
-            variadic,
-            (id.offset.start, self.curr_tok().offset.end),
-        ))
+            vec![]
+        } else {
+            self.parse_fields()
+        };
+        self.expect_peek_is_(TokenKind::RBrace)
+            .recover()
+            .skip_until_peek_is_in(&[
+                TokenKind::Hi,
+                TokenKind::Fun,
+                TokenKind::Group,
+                TokenKind::Contract,
+            ])
+            .finish();
+        Group::new(id, fields, (start.offset.start, self.curr_tok().offset.end))
     }
 
     /// difference with [Self::parse_params] is that this does not allow variadic fields
     ///
     /// starts with [TokenKind::LBrace] in current
-    /// ends with [TokenKind::RBrace] in current
-    fn parse_fields(&mut self) -> Result<Vec<GroupField>, ()> {
+    /// ends with [TokenKind::Terminator] in current
+    /// ends with [TokenKind::RBrace] in peek
+    fn parse_fields(&mut self) -> Vec<GroupField> {
         let mut fields = vec![];
         while !self.peek_tok_is(TokenKind::RBrace) {
-            fields.push(self.parse_field()?);
+            fields.push(self.parse_field());
         }
-        self.expect_peek_is(TokenKind::RBrace)?;
-        Ok(fields)
+        fields
     }
 
     /// difference with [Self::parse_param] is that this does not allow variadic fields
     ///
     /// starts with [TokenKind::Identifier] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_field(&mut self) -> Result<GroupField, ()> {
-        let id = self.expect_peek_is(TokenKind::Identifier)?;
-        self.expect_peek_is(TokenKind::Dash)?;
+    fn parse_field(&mut self) -> GroupField {
+        let id = self
+            .expect_peek_is_(TokenKind::Identifier)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::Dash, TokenKind::Terminator])
+                    || parser.peek_tok_is_type()
+            })
+            .finish();
+        self.expect_peek_is_(TokenKind::Dash)
+            .recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is(TokenKind::Terminator) || parser.peek_tok_is_type()
+            })
+            .finish();
         let dtype = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
-        let offset_end = self
-            .expect_peek_is(TokenKind::Terminator)
-            .and_then(|tok| Ok(tok.offset.end))?;
-        Ok(GroupField::new(id, dtype, (id.offset.start, offset_end)))
+            .expect_peek_is_type_()
+            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .or_recover()
+            .skip_until_peek_is_in(&[
+                TokenKind::Terminator,
+                TokenKind::Identifier,
+                TokenKind::RBrace,
+            ])
+            .finish();
+        self.expect_peek_is_(TokenKind::Terminator)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::Identifier, TokenKind::RBrace])
+                    || parser.curr_tok_is(TokenKind::Terminator)
+            })
+            .finish();
+        GroupField::new(id, dtype, (id.offset.start, self.curr_tok().offset.end))
+    }
+
+    /// starts with [TokenKind::Contract] in current
+    /// ends with [TokenKind::RBrace] in current
+    fn parse_contract(&mut self) -> Contract {
+        let start = self.curr_tok();
+        let id = self
+            .expect_peek_is_(TokenKind::Type)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until_peek_is(TokenKind::LBrace)
+            .finish();
+        let found_opening = self
+            .expect_peek_is_(TokenKind::LBrace)
+            .ignore()
+            .finish_result()
+            .is_ok();
+        let signatures = if found_opening && self.peek_tok_is(TokenKind::RBrace) {
+            self.empty_body_error(
+                self.curr_tok(),
+                self.peek_tok(),
+                vec![TokenKind::Identifier],
+                BodyType::Contract,
+                self.source
+                    .lines()
+                    .nth(self.peek_tok().line(&self.line_starts))
+                    .unwrap_or_default(),
+            );
+            vec![]
+        } else {
+            self.parse_fn_signatures()
+        };
+        self.expect_peek_is_(TokenKind::RBrace)
+            .recover()
+            .skip_until_peek_is_in(&[
+                TokenKind::Hi,
+                TokenKind::Fun,
+                TokenKind::Group,
+                TokenKind::Contract,
+            ])
+            .finish();
+        Contract::new(
+            id,
+            signatures,
+            (start.offset.start, self.curr_tok().offset.end),
+        )
     }
 
     /// starts with [TokenKind::Identifier] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_fn_signature(&mut self) -> Result<FnSignature, ()> {
-        let id = self
-            .expect_peek_is(TokenKind::Identifier)
-            .and_then(|tok| Ok(tok))?;
-        self.expect_peek_is(TokenKind::Dash)?;
-        let dtype = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
-        self.expect_peek_is(TokenKind::LParen)?;
-        let mut params = vec![];
-        while !self.peek_tok_is(TokenKind::RParen) {
-            params.push(
-                self.expect_peek_is_type()
-                    .and_then(|tok| self.parse_data_type(tok))?,
-            );
-            self.allow_hanging_comma(TokenKind::RParen)?;
+    /// ends with [TokenKind::RBrace] in peek
+    fn parse_fn_signatures(&mut self) -> Vec<FnSignature> {
+        let mut signatures: Vec<FnSignature> = vec![];
+        while !self.peek_tok_is(TokenKind::RBrace) {
+            signatures.push(self.parse_fn_signature());
         }
-        self.expect_peek_is(TokenKind::RParen)?;
-        let offset_end = self
-            .expect_peek_is(TokenKind::Terminator)
-            .and_then(|tok| Ok(tok.offset.end))?;
-        Ok(FnSignature::new(
+        signatures
+    }
+
+    /// starts with [TokenKind::Identifier] in peek
+    /// ends with [TokenKind::Terminator] in current
+    fn parse_fn_signature(&mut self) -> FnSignature {
+        let (id, error_count) = self
+            .expect_peek_is_(TokenKind::Identifier)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::Dash,
+                    TokenKind::LParen,
+                    TokenKind::RParen,
+                    TokenKind::Terminator,
+                ]) || parser.peek_tok_is_type()
+            })
+            .finish_with_error_count();
+        let ((), error_count) = self
+            .expect_peek_is_(TokenKind::Dash)
+            .recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::LParen,
+                    TokenKind::RParen,
+                    TokenKind::Terminator,
+                ]) || parser.peek_tok_is_type()
+            })
+            .limit_errors(error_count)
+            .finish_with_error_count();
+        let (dtype, error_count) = self
+            .expect_peek_is_type_()
+            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::LParen,
+                    TokenKind::RParen,
+                    TokenKind::Terminator,
+                ])
+            })
+            .limit_errors(error_count)
+            .finish_with_error_count();
+        let params = self.parse_fn_signature_params();
+        self.expect_peek_is_(TokenKind::Terminator)
+            .recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[TokenKind::Identifier, TokenKind::RBrace])
+                    || parser.curr_tok_is(TokenKind::Terminator)
+            })
+            .limit_errors(error_count)
+            .finish();
+        FnSignature::new(
             id,
             dtype,
             params,
-            (id.offset.start, offset_end),
-        ))
+            (id.offset.start, self.curr_tok().offset.end),
+        )
+    }
+
+    /// starts with [TokenKind::LParen] in peek
+    /// ends with [TokenKind::RParen] in current
+    /// ends with [TokenKind::Terminator] in peek
+    fn parse_fn_signature_params(&mut self) -> Vec<DataType> {
+        let ((), mut error_count) = self
+            .expect_peek_is_(TokenKind::LParen)
+            .recover()
+            .skip_until_peek_is_in(&[TokenKind::RParen, TokenKind::Terminator])
+            .finish_with_error_count();
+        let mut params = vec![];
+        while !self.peek_tok_is(TokenKind::RParen) {
+            let (param, ec) = self
+                .expect_peek_is_type_()
+                .ok_then(|parser, actual| parser.parse_data_type(actual))
+                .or_recover()
+                .skip_one_if(|parser| {
+                    !parser.peek_tok_is_in(&[TokenKind::Comma, TokenKind::RParen])
+                })
+                .limit_errors(error_count)
+                .finish_with_error_count();
+            error_count = ec;
+            params.push(param);
+            self.allow_hanging_comma(TokenKind::RParen);
+        }
+        self.expect_peek_is_(TokenKind::RParen)
+            .recover()
+            .skip_until(|parser| parser.peek_tok_is(TokenKind::Terminator))
+            .limit_errors(error_count)
+            .finish();
+        params
     }
 
     /// starts with [TokenKind::LBrace] in current
     /// ends with [TokenKind::RBrace] in current
-    fn parse_body(&mut self, body_type: EmptyBodyErrorType) -> Result<Body, ()> {
-        let mut statements: Vec<Statement> = vec![];
+    fn parse_body(&mut self, body_type: BodyType) -> Body {
         let start = self.curr_tok();
-        // disallow empty bodies
-        if self.peek_tok_is(TokenKind::RBrace) {
+        let statements = if self.peek_tok_is(TokenKind::RBrace) {
             self.empty_body_error(
                 self.curr_tok(),
                 self.peek_tok(),
@@ -483,65 +714,67 @@ impl<'a> Parser<'a> {
                     .unwrap_or_default(),
             );
             self.advance(1);
-            return Err(());
-        }
-        while !self.peek_tok_is(TokenKind::RBrace) {
-            self.advance(1);
-            let (expected, body_parser) = match body_type {
-                EmptyBodyErrorType::For => {
-                    let filtered_refs = &self
+            vec![]
+        } else {
+            let mut stmts = vec![];
+            while !self.peek_tok_is(TokenKind::RBrace) {
+                stmts.push(self.parse_body_statement(body_type));
+            }
+            stmts
+        };
+        self.expect_peek_is_(TokenKind::RBrace).ignore().finish();
+        Body::new(statements, (start.offset.start, self.curr_tok().offset.end))
+    }
+
+    /// starts with [TokenKind::LBrace] in current
+    /// ends with [TokenKind::RBrace] or [TokenKind::Terminator] in current
+    fn parse_body_statement(&mut self, body_type: BodyType) -> Statement {
+        let expected = match body_type {
+            BodyType::For => self
+                .body_parse_fns
+                .iter()
+                .filter(|&v| !&[TokenKind::Bweak, TokenKind::Continue].contains(&v.0))
+                .map(|(&tokens, _)| tokens)
+                .collect::<Vec<_>>(),
+            _ => self
+                .body_parse_fns
+                .iter()
+                .map(|(&tokens, _)| tokens)
+                .collect::<Vec<_>>(),
+        };
+        self.expect_peek_is_in_(&expected)
+            .ok_then(|parser, actual| {
+                let body_parser = match body_type {
+                    BodyType::For => parser
                         .body_parse_fns
                         .iter()
                         .filter(|&v| !&[TokenKind::Bweak, TokenKind::Continue].contains(&v.0))
-                        .collect::<HashMap<_, _>>();
-                    (
-                        filtered_refs
-                            .iter()
-                            .map(|(&&tokens, _)| tokens)
-                            .collect::<Vec<_>>(),
-                        filtered_refs
-                            .iter()
-                            .map(|(&&a, &&b)| (a, b))
-                            .collect::<HashMap<_, _>>(),
-                    )
+                        .map(|(&a, &b)| (a, b))
+                        .collect::<HashMap<_, _>>(),
+                    _ => parser
+                        .body_parse_fns
+                        .iter()
+                        .map(|(&tok, &parser)| (tok, parser))
+                        .collect::<HashMap<_, _>>(),
+                };
+                match body_parser.get(&actual.kind) {
+                    Some(stmt_parser) => stmt_parser(parser),
+                    None => Err(()),
                 }
-                _ => {
-                    let parser_refs = self.body_parse_fns.iter().collect::<HashMap<_, _>>();
-                    (
-                        parser_refs
-                            .iter()
-                            .map(|(&&tokens, _)| tokens)
-                            .collect::<Vec<_>>(),
-                        parser_refs
-                            .iter()
-                            .map(|(&&tok, &&parser)| (tok, parser))
-                            .collect::<HashMap<_, _>>(),
-                    )
-                }
-            };
-            let stmt = match body_parser.get(&self.curr_tok().kind) {
-                Some(parser) => parser(self)?,
-                None => {
-                    self.no_parsing_fn_error(
-                        MissingParserErrorHeader::Body,
-                        self.curr_tok(),
-                        expected,
-                    );
-                    return Err(());
-                }
-            };
-            statements.push(stmt);
-        }
-        let offset_end = self
-            .expect_peek_is(TokenKind::RBrace)
-            .and_then(|tok| Ok(tok.offset.end))?;
-        Ok(Body::new(statements, (start.offset.start, offset_end)))
+            })
+            .or_recover()
+            .skip_until(|parser| {
+                parser.curr_tok_is(TokenKind::Terminator) || parser.peek_tok_is_in(&expected)
+            })
+            .error_header(MissingParserErrorHeader::Body.header())
+            .finish()
     }
 
     // }}}
 
     // DATA TYPE PARSERS {{{
 
+    // TODO: cannot parse optional and mutable as part of the data type
     /// starts with [DataType]'s first token in current
     /// ends with [DataType]'s last token in current
     /// end token may be:
@@ -583,13 +816,13 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         self.unexpected_token_error(
-                            Some("[INVALID INNER DATA TYPE]"),
+                            Some("INVALID INNER DATA TYPE"),
                             Some("Only data types are allowed to be inner types"),
                             self.curr_tok(),
                             TokenKind::data_types(),
                         );
-                        self.advance(2);
-                        return Err(());
+                        self.advance_if(1, |parser| parser.curr_tok_is(TokenKind::RBrace));
+                        Err(())
                     }
                 }
             }
@@ -688,7 +921,7 @@ impl<'a> Parser<'a> {
             self.expect_peek_is(TokenKind::LBrace)?;
             Ok(expr)
         })?;
-        let body = self.parse_body(EmptyBodyErrorType::If)?;
+        let body = self.parse_body(BodyType::If)?;
         let elifs = match self.peek_tok().kind {
             TokenKind::Ewif => self.parse_elifs()?,
             _ => vec![],
@@ -697,7 +930,7 @@ impl<'a> Parser<'a> {
             TokenKind::Ewse => {
                 self.expect_peek_is(TokenKind::Ewse)?;
                 self.expect_peek_is(TokenKind::LBrace)?;
-                Some(self.parse_body(EmptyBodyErrorType::If)?)
+                Some(self.parse_body(BodyType::If)?)
             }
             _ => None,
         };
@@ -723,7 +956,7 @@ impl<'a> Parser<'a> {
                 self.expect_peek_is(TokenKind::LBrace)?;
                 Ok(expr)
             })?;
-            let body = self.parse_body(EmptyBodyErrorType::If)?;
+            let body = self.parse_body(BodyType::If)?;
             let offset_end = self.curr_tok().offset.end;
             res.push(ElifStatement::new(
                 condition,
@@ -745,7 +978,7 @@ impl<'a> Parser<'a> {
             TokenKind::Hi => self.parse_for_loop(),
             TokenKind::Identifier => self.parse_for_each(),
             _ => Err(self.unexpected_token_error(
-                Some("[INVALID FOW INITIALZATION]"),
+                Some("INVALID FOW INITIALZATION"),
                 Some("Declare a variable (hi i = 1~ i<4~ i+1) or use an iterable (i in [1,2,3])"),
                 self.peek_tok(),
                 vec![TokenKind::Hi, TokenKind::Identifier],
@@ -772,7 +1005,7 @@ impl<'a> Parser<'a> {
                 self.expect_peek_is(TokenKind::LBrace)?;
                 Ok(update)
             })?;
-        let body = self.parse_body(EmptyBodyErrorType::For)?;
+        let body = self.parse_body(BodyType::For)?;
         let offset_end = self.curr_tok().offset.end;
         Ok(Statement::ForLoop(ForLoop::new(
             init,
@@ -792,7 +1025,7 @@ impl<'a> Parser<'a> {
         let collection = self.parse_expression(Precedence::Lowest)?;
         let body = self
             .expect_peek_is(TokenKind::LBrace)
-            .and_then(|_| self.parse_body(EmptyBodyErrorType::For))?;
+            .and_then(|_| self.parse_body(BodyType::For))?;
         let offset_end = self.curr_tok().offset.end;
         Ok(Statement::ForEach(ForEach::new(
             item_id,
@@ -832,7 +1065,7 @@ impl<'a> Parser<'a> {
                 self.curr_tok(),
                 self.peek_tok(),
                 vec![TokenKind::Type, TokenKind::Default],
-                EmptyBodyErrorType::Mash,
+                BodyType::Mash,
                 self.source
                     .lines()
                     .nth(self.peek_tok().line(&self.line_starts))
@@ -897,7 +1130,7 @@ impl<'a> Parser<'a> {
                     .into_iter()
                     .map(|(token, _)| token)
                     .collect::<Vec<_>>(),
-                EmptyBodyErrorType::MashCase,
+                BodyType::MashCase,
                 self.source
                     .lines()
                     .nth(self.peek_tok().line(&self.line_starts))
@@ -1285,21 +1518,21 @@ impl<'a> Parser<'a> {
                 Accessed::Token(_) => Ok(Expression::Access(AccessType::Field(GroupAccess::new(
                     Box::new(expr),
                     accessed,
-                    std::marker::PhantomData,
+                    PhantomData,
                 )))),
                 Accessed::IndexedId(res) => match res.id {
                     Indexable::Token(_) => Ok(Expression::Access(AccessType::Field(
-                        GroupAccess::new(Box::new(expr), accessed, std::marker::PhantomData),
+                        GroupAccess::new(Box::new(expr), accessed, PhantomData),
                     ))),
                     Indexable::FnCall(_) => Ok(Expression::Access(AccessType::Method(
-                        GroupAccess::new(Box::new(expr), accessed, std::marker::PhantomData),
+                        GroupAccess::new(Box::new(expr), accessed, PhantomData),
                     ))),
                     _ => unreachable!(
                         r#"parse_access_expression: indexed result from parse_single_accessed can only be a Token or FnCall"#
                     ),
                 },
                 Accessed::FnCall(_) => Ok(Expression::Access(AccessType::Method(
-                    GroupAccess::new(Box::new(expr), accessed, std::marker::PhantomData),
+                    GroupAccess::new(Box::new(expr), accessed, PhantomData),
                 ))),
             }
         } else {
@@ -1511,6 +1744,26 @@ impl<'a> Parser<'a> {
         self.curr_tok().kind == token_kind
     }
 
+    /// checks current token's type against given TokenKinds
+    fn curr_tok_is_in(&self, token_types: &[TokenKind]) -> bool {
+        token_types.contains(&self.curr_tok().kind)
+    }
+
+    /// checks peek token's type is a DataType
+    fn curr_tok_is_type(&self) -> bool {
+        matches!(
+            self.curr_tok().kind,
+            TokenKind::Type
+                | TokenKind::Chan
+                | TokenKind::Kun
+                | TokenKind::Senpai
+                | TokenKind::Kouhai
+                | TokenKind::San
+                | TokenKind::Sama
+                | TokenKind::Dono
+        )
+    }
+
     /// checks peek token's type against given TokenKind
     fn peek_tok_is(&self, token_kind: TokenKind) -> bool {
         self.peek_tok().kind == token_kind
@@ -1523,17 +1776,7 @@ impl<'a> Parser<'a> {
 
     /// checks peek token's type is a DataType
     fn peek_tok_is_type(&self) -> bool {
-        match self.peek_tok().kind {
-            TokenKind::Type
-            | TokenKind::Chan
-            | TokenKind::Kun
-            | TokenKind::Senpai
-            | TokenKind::Kouhai
-            | TokenKind::San
-            | TokenKind::Sama
-            | TokenKind::Dono => true,
-            _ => false,
-        }
+        self.peek_tok().kind.is_type()
     }
 
     // TODO: for all expect_peek methods, add header and context as parameters
@@ -1612,20 +1855,67 @@ impl<'a> Parser<'a> {
     }
 
     /// allows hanging comma on enclosed, comma separated expressions
-    fn allow_hanging_comma(&mut self, closing: TokenKind) -> Result<(), ()> {
-        if self.peek_tok_is(TokenKind::Comma) {
-            Ok(self.advance(1))
-        } else if self.peek_tok_is(closing) {
-            Ok(())
+    /// ends with [TokenKind::Comma] in current and passed in closing in peek,
+    /// regardless of whether the expect failed or not
+    fn allow_hanging_comma(&mut self, closing: TokenKind) {
+        Expectation::new(vec![TokenKind::Comma], self.peek_tok(), self, true)
+            .ok_then(|parser, _| {
+                if parser.peek_tok_is(TokenKind::Comma) {
+                    Ok(parser.advance(1))
+                } else if parser.peek_tok_is(closing) {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            })
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is(closing) || parser.curr_tok_is(TokenKind::Comma)
+            })
+            .finish();
+    }
+
+    // }}}
+
+    // RECOVER EXPECT METHODS {{{
+    /// advances cursor 1 time if peek tok is eq to given
+    /// adds an error otherwise
+    fn expect_peek_is_(&mut self, token_kind: TokenKind) -> Expectation<'src, '_> {
+        let ok = self.peek_tok().kind == token_kind;
+        let actual = if ok {
+            self.advance(1);
+            self.curr_tok()
         } else {
-            self.unexpected_token_error(
-                None,
-                None,
-                self.peek_tok(),
-                vec![TokenKind::Comma, closing],
-            );
-            Err(())
-        }
+            self.peek_tok()
+        };
+        Expectation::new(vec![token_kind], actual, self, ok)
+    }
+
+    /// advances cursor 1 time if peek tok is eq to any of the given
+    /// adds an error otherwise
+    fn expect_peek_is_in_(&mut self, token_kinds: &[TokenKind]) -> Expectation<'src, '_> {
+        let ok = token_kinds.contains(&self.peek_tok().kind);
+        let actual = if ok {
+            self.advance(1);
+            self.curr_tok()
+        } else {
+            self.peek_tok()
+        };
+        println!("expect peek is in {:?}, ok {ok}", token_kinds);
+        Expectation::new(token_kinds.to_vec(), actual, self, ok)
+    }
+
+    /// checks peek token's type is a DataType
+    fn expect_peek_is_type_(&mut self) -> Expectation<'src, '_> {
+        let expecteds = TokenKind::data_types();
+        let ok = expecteds.contains(&self.peek_tok().kind);
+        let actual = if ok {
+            self.advance(1);
+            self.curr_tok()
+        } else {
+            self.peek_tok()
+        };
+        Expectation::new(expecteds, actual, self, ok)
     }
 
     // }}}
@@ -1634,20 +1924,20 @@ impl<'a> Parser<'a> {
 
     fn unexpected_token_error(
         &mut self,
-        header: Option<&'a str>,
-        context: Option<&'a str>,
+        header: Option<&'src str>,
+        context: Option<&'src str>,
         actual: Token,
         expected: Vec<TokenKind>,
     ) {
-        self.error = UnexpectedTokenError::new(
-            self.source,
-            self.line_starts,
-            actual,
-            expected.to_vec(),
-            header,
-            context,
-        )
-        .to_string()
+        self.errors
+            .push(ParserError::Unexpected(UnexpectedTokenError::new(
+                self.source,
+                self.line_starts,
+                actual,
+                expected.to_vec(),
+                header,
+                context,
+            )))
     }
 
     fn empty_body_error(
@@ -1655,18 +1945,17 @@ impl<'a> Parser<'a> {
         opening: Token,
         actual: Token,
         expected: Vec<TokenKind>,
-        body_type: EmptyBodyErrorType,
-        line_text: &'a str,
+        body_type: BodyType,
+        line_text: &'src str,
     ) {
-        self.error = EmptyBodyError::new(
+        self.errors.push(ParserError::EmptyBody(EmptyBodyError::new(
             opening.buffer_pos(&self.line_starts),
             actual.source_str(self.source),
             actual.buffer_pos(&self.line_starts),
             expected,
             body_type,
             line_text,
-        )
-        .to_string()
+        )))
     }
 
     fn no_parsing_fn_error(
@@ -1675,15 +1964,15 @@ impl<'a> Parser<'a> {
         actual: Token,
         expected: Vec<TokenKind>,
     ) {
-        self.error = UnexpectedTokenError::new(
-            self.source,
-            self.line_starts,
-            actual,
-            expected,
-            Some(error_header.header()),
-            None,
-        )
-        .to_string()
+        self.errors
+            .push(ParserError::Unexpected(UnexpectedTokenError::new(
+                self.source,
+                self.line_starts,
+                actual,
+                expected,
+                Some(error_header.header()),
+                None,
+            )))
     }
 
     // }}}
@@ -1698,9 +1987,9 @@ enum MissingParserErrorHeader {
 impl MissingParserErrorHeader {
     fn header(&self) -> &'static str {
         match self {
-            Self::Prefix => "[NOT A VALID VALUE STARTING TOKEN]",
-            Self::Infix => "[NOT A VALID OPERATOR]",
-            Self::Body => "[NOT A VALID STATEMENT STARTING TOKEN]",
+            Self::Prefix => "NOT A VALID EXPRESSION STARTING TOKEN",
+            Self::Infix => "NOT A VALID OPERATOR",
+            Self::Body => "NOT A VALID STATEMENT STARTING TOKEN",
         }
     }
 }
@@ -1775,11 +2064,32 @@ impl<'src, 'parser> Expectation<'src, 'parser> {
     ///     .ignore_err();
     ///     .finish();
     /// ```
-    pub fn recover<O, R: Default>(self) -> Recovery<'src, 'parser, (), R> {
-        Recovery::<(), R> {
+    pub fn recover(self) -> Recovery<'src, 'parser, (), ()> {
+        Recovery::<(), ()> {
             expectation: self,
             ok_action: (),
             rtype: PhantomData,
+        }
+    }
+    /// Do not add a recovery strategy and or an ok action, regardless of the
+    /// outcome of the expect operation.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// self.expect_peek_is(TokenKind::Dash)
+    ///     .ignore()
+    ///     .finish()
+    /// ```
+    pub fn ignore(self) -> FinishRecovery<'src, 'parser, (), (), impl FnMut(&mut Parser)> {
+        FinishRecovery {
+            expectation: self,
+            ok_action: (),
+            err_action: |_| {},
+            rtype: PhantomData,
+            error_count: 0,
+            header: None,
+            context: None,
         }
     }
 }
@@ -1836,6 +2146,7 @@ where
             ok_action: self.ok_action,
             err_action: |_| {},
             rtype: PhantomData,
+            error_count: 0,
             header: None,
             context: None,
         }
@@ -1935,6 +2246,7 @@ where
                 }
             },
             rtype: PhantomData,
+            error_count: 0,
             header: None,
             context: None,
         }
@@ -1963,6 +2275,7 @@ where
                 }
             },
             rtype: PhantomData,
+            error_count: 0,
             header: None,
             context: None,
         }
@@ -2044,27 +2357,6 @@ where
             )
         })
     }
-    /// Allows to limit local errors by passing in an error count. The error
-    /// count is assumed to be accumulated by the consumer outside this struct.
-    /// # Example
-    /// ```
-    /// // hi aqua-chan = 10~
-    /// //        ^
-    /// let error_count = 0;
-    /// let MAX_ERROR_COUNT = 3;
-    ///
-    /// let updated_count = self.expect_peek_is(TokenKind::Dash)
-    ///     .recover()
-    ///     .limit_errors(error_count)
-    ///     .skip_until_peek_is_type()
-    ///     .finish_with_error_count(error_count);
-    /// ```
-    pub fn limit_errors(mut self, error_count: usize) -> Self {
-        if error_count > MAX_LOCAL_ERROR_COUNT {
-            self.expectation.ok = true
-        }
-        self
-    }
 }
 
 struct FinishRecovery<'src, 'parser, O, R, E>
@@ -2077,6 +2369,7 @@ where
     ok_action: O,
     err_action: E,
     rtype: PhantomData<R>,
+    error_count: usize,
     header: Option<&'src str>,
     context: Option<&'src str>,
 }
@@ -2107,7 +2400,7 @@ where
     ///     .finish();
     /// ```
     pub fn finish(self) -> R {
-        self.finish_as_result().unwrap_or_default()
+        self.finish_result().unwrap_or_default()
     }
     /// Just like [FinishRecovery::finish] but with the error count. Error
     /// count is incremented when an error occured, otherwise it stays the same.
@@ -2132,10 +2425,10 @@ where
     ///     .skip_until_peek_is(TokenKind::Terminator)
     ///     .finish_with_error_count(error_count);
     /// ```
-    pub fn finish_with_error_count(self, error_count: usize) -> (R, usize) {
-        match self.finish_as_result() {
-            Ok(res) => (res, error_count),
-            Err(()) => (R::default(), error_count + 1),
+    pub fn finish_with_error_count(self) -> (R, usize) {
+        match self.finish_result_with_error_count() {
+            (Ok(res), ec) => (res, ec),
+            (Err(()), ec) => (R::default(), ec),
         }
     }
     /// Just like [FinishRecovery::finish] but with as a Result.
@@ -2161,7 +2454,7 @@ where
     ///     .finish_as_result()
     ///     .expect("Your panic message or something");
     /// ```
-    pub fn finish_as_result(mut self) -> Result<R, ()> {
+    pub fn finish_result(mut self) -> Result<R, ()> {
         if self.expectation.ok {
             self.ok_action
                 .call_ok(self.expectation.parser, self.expectation.actual)
@@ -2180,6 +2473,67 @@ where
             ));
             Err(())
         }
+    }
+    /// Just like [FinishRecovery::finish_result] but with the error count. Error
+    /// count is incremented when an error occured, otherwise it stays the same.
+    ///
+    /// This is useful for limiting local errors from ballooning.
+    /// # Example
+    /// ```
+    /// let error_count = 0;
+    ///
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// let (dtype, error_count): (Result<DataType, ()>, usize) = self
+    ///     .expect_peek_is_type()
+    ///     .ok_action(|parser, actual| parser.parse_data_type(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Assign)
+    ///     .finish_with_error_count();
+    ///
+    /// // hi aqua-chan = 10~
+    /// //              ^
+    /// let (unit_result, error_count): (Result<(), ()>, usize) = self
+    ///     .expect_peek_is(TokenKind::Assign)
+    ///     .recover()
+    ///     .skip_until_peek_is(TokenKind::Terminator)
+    ///     .finish_with_error_count();
+    /// ```
+    pub fn finish_result_with_error_count(self) -> (Result<R, ()>, usize) {
+        let error_count = self.error_count;
+        match self.finish_result() {
+            Ok(res) => (Ok(res), error_count),
+            Err(()) => (Err(()), error_count + 1),
+        }
+    }
+    /// Allows to limit local errors by passing in an error count. The error
+    /// count is assumed to be accumulated by the consumer outside this struct.
+    ///
+    /// This is useful for limiting local errors from ballooning.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// let error_count = 0;
+    /// let MAX_ERROR_COUNT = 3;
+    ///
+    /// let error_count = self.expect_peek_is(TokenKind::Dash)
+    ///     .recover()
+    ///     .skip_until_peek_is_type()
+    ///     .limit_errors(error_count)
+    ///     .finish_with_error_count();
+    ///
+    /// let error_count = self.expect_peek_is_type()
+    ///     .recover()
+    ///     .skip_until_peek_is_assign()
+    ///     .limit_errors(error_count)
+    ///     .finish_with_error_count();
+    /// ```
+    pub fn limit_errors(mut self, error_count: usize) -> Self {
+        if error_count > MAX_LOCAL_ERROR_COUNT {
+            self.expectation.ok = true
+        }
+        self
     }
     /// Adds an error header to the error message when the expect operation
     /// failed.

@@ -5,63 +5,39 @@ use crate::{
 };
 use core::fmt;
 
-#[derive(Clone, Copy)]
-pub enum EmptyBodyErrorType {
-    Fn,
-    If,
-    Mash,
-    MashCase,
-    For,
-    Method,
-    Group,
-    Contract,
+#[derive(Debug)]
+pub enum ParserError<'src> {
+    EmptyBody(EmptyBodyError<'src>),
+    NoMain(NoMainError<'src>),
+    Unexpected(UnexpectedTokenError<'src>),
 }
-impl fmt::Display for EmptyBodyErrorType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Fn => "FUNCTION",
-                Self::If => "IF",
-                Self::Mash => "MASH",
-                Self::MashCase => "MASH CASE",
-                Self::For => "FOR",
-                Self::Method => "METHOD",
-                Self::Group => "GROUP",
-                Self::Contract => "CONTRACT",
-            }
-        )
-    }
-}
-impl EmptyBodyErrorType {
-    pub fn sample_statement(&self) -> &'static str {
+impl fmt::Display for ParserError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Fn | Self::If | Self::MashCase | Self::For | Self::Method => {
-                "pwint(\"hewwo world :3\")~"
-            }
-            Self::Mash => "default: pwint(\"hewwo world :3\")~",
-            Self::Group => "field-chan~",
-            Self::Contract => "method-chan(kun, senpai)~",
+            Self::EmptyBody(res) => res.fmt(f),
+            Self::NoMain(res) => res.fmt(f),
+            Self::Unexpected(res) => res.fmt(f),
         }
     }
 }
-pub struct EmptyBodyError<'a> {
+
+#[derive(Debug)]
+pub struct EmptyBodyError<'src> {
     opening_buffer_pos: (usize, usize),
-    closing_str: &'a str,
+    closing_str: &'src str,
     closing_buffer_pos: (usize, usize),
     expected: Vec<TokenKind>,
-    body_type: EmptyBodyErrorType,
-    line_text: &'a str,
+    body_type: BodyType,
+    line_text: &'src str,
 }
-impl<'a> EmptyBodyError<'a> {
+impl<'src> EmptyBodyError<'src> {
     pub fn new(
         opening_buffer_pos: (usize, usize),
-        closing_str: &'a str,
+        closing_str: &'src str,
         closing_buffer_pos: (usize, usize),
         expected: Vec<TokenKind>,
-        body_type: EmptyBodyErrorType,
-        line_text: &'a str,
+        body_type: BodyType,
+        line_text: &'src str,
     ) -> Self {
         Self {
             opening_buffer_pos,
@@ -73,7 +49,7 @@ impl<'a> EmptyBodyError<'a> {
         }
     }
 }
-impl<'a> fmt::Display for EmptyBodyError<'a> {
+impl<'src> fmt::Display for EmptyBodyError<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let pipe = "|".blue();
         let none = " ";
@@ -159,24 +135,66 @@ impl<'a> fmt::Display for EmptyBodyError<'a> {
                     )
                 }
             )
-            .trim()
         )
     }
 }
 
-pub struct NoMainError<'a> {
-    line_text: &'a str,
+#[derive(Debug, Clone, Copy)]
+pub enum BodyType {
+    Fn,
+    If,
+    Mash,
+    MashCase,
+    For,
+    Method,
+    Group,
+    Contract,
+}
+impl fmt::Display for BodyType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Fn => "FUNCTION",
+                Self::If => "IF",
+                Self::Mash => "MASH",
+                Self::MashCase => "MASH CASE",
+                Self::For => "FOR",
+                Self::Method => "METHOD",
+                Self::Group => "GROUP",
+                Self::Contract => "CONTRACT",
+            }
+        )
+    }
+}
+impl BodyType {
+    pub fn sample_statement(&self) -> &'static str {
+        match self {
+            Self::Fn | Self::If | Self::MashCase | Self::For | Self::Method => {
+                "pwint(\"hewwo world :3\")~"
+            }
+            Self::Mash => "default: pwint(\"hewwo world :3\")~",
+            Self::Group => "field-chan~",
+            Self::Contract => "method-chan(kun, senpai)~",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct NoMainError<'src> {
+    line_text: &'src str,
     buffer_pos: (usize, usize),
 }
-impl<'a> NoMainError<'a> {
-    pub fn new(line_text: &'a str, buffer_pos: (usize, usize)) -> Self {
+impl<'src> NoMainError<'src> {
+    pub fn new(line_text: &'src str, buffer_pos: (usize, usize)) -> Self {
         Self {
             line_text,
             buffer_pos,
         }
     }
 }
-impl<'a> fmt::Display for NoMainError<'a> {
+impl<'src> fmt::Display for NoMainError<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -212,29 +230,28 @@ impl<'a> fmt::Display for NoMainError<'a> {
                 main_func_body = "    pwint(\"hewwo world :3\")~".green(),
                 main_func_tail = "}".green(),
             )
-            .trim()
         )
     }
 }
 
-pub struct UnexpectedTokenError<'a> {
-    actual_str: &'a str,
+#[derive(Debug)]
+pub struct UnexpectedTokenError<'src> {
+    actual_str: &'src str,
     actual_kind: TokenKind,
     actual_buffer_pos: (usize, usize),
     expected_kinds: Vec<TokenKind>,
-    header: Option<&'a str>,
-    context: Option<&'a str>,
-    line_text: &'a str,
-    line_before_text: &'a str,
+    header: Option<&'src str>,
+    context: Option<&'src str>,
+    line_text: &'src str,
 }
-impl<'a> UnexpectedTokenError<'a> {
+impl<'src> UnexpectedTokenError<'src> {
     pub fn new(
-        source: &'a str,
-        line_starts: &'a Vec<usize>,
+        source: &'src str,
+        line_starts: &'src Vec<usize>,
         actual: Token,
         expected_kinds: Vec<TokenKind>,
-        header: Option<&'a str>,
-        context: Option<&'a str>,
+        header: Option<&'src str>,
+        context: Option<&'src str>,
     ) -> Self {
         let line = actual.line(line_starts);
         Self {
@@ -248,30 +265,25 @@ impl<'a> UnexpectedTokenError<'a> {
             header,
             context,
             line_text: source.lines().nth(line).unwrap_or_default(),
-            line_before_text: match line {
-                0 => "".into(),
-                _ => source.lines().nth(line - 1).unwrap_or_default(),
-            },
         }
     }
 }
-impl<'a> fmt::Display for UnexpectedTokenError<'a> {
+impl<'src> fmt::Display for UnexpectedTokenError<'src> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pipe = "|".blue();
         write!(
             f,
             "{}",
             format!(
                 r#"
 {header} {line_col_info}
-{context}
-{expected}
+{context}{expected}
 {got}
 {none:COL_WIDTH$} {pipe}
-{line_before:COL_WIDTH$} {pipe} {line_before_text}
 {line:COL_WIDTH$} {pipe} {line_text}
 {none:COL_WIDTH$} {pipe} {padding}{highlight} {error_msg}
 "#,
-                header = self.header.unwrap_or("[UNEXPECTED TOKEN]").red(),
+                header = format!("[{}]", self.header.unwrap_or("UNEXPECTED TOKEN")).red(),
                 line_col_info = if self.actual_str.len() == 1 {
                     format!(
                         "at line {} column {}",
@@ -289,7 +301,7 @@ impl<'a> fmt::Display for UnexpectedTokenError<'a> {
                 },
                 context = match &self.context {
                     Some(ctx) => {
-                        ctx.italic()
+                        ctx.italic() + "\n"
                     }
                     None => "".to_string(),
                 },
@@ -310,19 +322,12 @@ impl<'a> fmt::Display for UnexpectedTokenError<'a> {
                 )
                 .bold(),
                 none = " ",
-                pipe = "|".blue(),
-                line_before = match self.actual_buffer_pos.0 - 1 {
-                    0 => "".into(),
-                    rest => rest.to_string(),
-                },
-                line_before_text = self.line_before_text,
                 line = self.actual_buffer_pos.0,
                 line_text = self.line_text,
                 padding = " ".repeat(self.actual_buffer_pos.1 - 1),
                 highlight = "^".repeat(self.actual_str.len()).red().italic(),
                 error_msg = "unexpected token".red().italic(),
             )
-            .trim()
         )
     }
 }

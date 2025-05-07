@@ -85,15 +85,14 @@ impl Command for Parse {
                 })
                 .collect::<Vec<Token>>(),
         );
-        match p.parse_program() {
-            Ok(()) => Ok(println!(
-                "{}",
-                p.program.to_formatted_string(&lexer.source, 0)
-            )),
-            Err(()) => {
-                println!("{}", p.error);
-                Err(format!("Failed to parse file: {}", self.path.display()))
-            }
+        let _ = p.parse_program();
+        println!("{}", p.program.to_formatted_string(&lexer.source, 0));
+        p.errors
+            .iter()
+            .for_each(|err| println!("{}", err.to_string()));
+        if p.errors.len() > 0 {
+            println!("Failed to parse file: {}", self.path.display());
         }
+        Ok(())
     }
 }

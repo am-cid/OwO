@@ -63,10 +63,21 @@ fn assert_error(error_header: &str, source: &str) {
     match parser.parse_program() {
         Ok(()) => assert!(false),
         Err(()) => assert!(
-            parser.error.starts_with(&error_header.red()),
+            parser
+                .errors
+                .iter()
+                .map(|err| err.to_string())
+                .nth(0)
+                .unwrap()
+                .starts_with(&error_header.red()),
             "Expected {}\nGot {}",
             error_header,
-            parser.error
+            parser
+                .errors
+                .iter()
+                .map(|err| err.to_string())
+                .nth(0)
+                .unwrap()
         ),
     }
 }
