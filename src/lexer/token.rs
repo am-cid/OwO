@@ -2,10 +2,13 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::Range;
 
-// TOKEN KINDS {{{
+// TOKEN KIND {{{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TokenKind {
+    #[default]
+    EOF,
+
     // ids
     Identifier,
     Type,
@@ -69,8 +72,6 @@ pub enum TokenKind {
     Hash,
     Pipe,
     Terminator,
-    #[default]
-    EOF,
 
     // whitespace
     Whitespace,
@@ -115,6 +116,7 @@ pub enum TokenKind {
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::EOF => write!(f, "EOF"),
             Self::Identifier => write!(f, "Identifier"),
             Self::Type => write!(f, "Type"),
             Self::Chan => write!(f, "Chan"),
@@ -159,7 +161,6 @@ impl fmt::Display for TokenKind {
             Self::Hash => write!(f, "Hash"),
             Self::Pipe => write!(f, "Pipe"),
             Self::Terminator => write!(f, "Terminator"),
-            Self::EOF => write!(f, "EOF"),
             Self::Whitespace => write!(f, "Whitespace"),
             Self::Tab => write!(f, "Tab"),
             Self::Newline => write!(f, "Newline"),
@@ -323,7 +324,7 @@ pub struct Token {
 //     }
 // }
 
-impl<'a> Token {
+impl<'src> Token {
     pub fn default() -> Self {
         Self {
             kind: TokenKind::EOF,
@@ -333,16 +334,11 @@ impl<'a> Token {
     pub fn new(kind: TokenKind, offset: Offset) -> Self {
         Self { kind, offset }
     }
-    pub fn new_zeroed(kind: TokenKind) -> Self {
-        Self {
-            kind,
-            offset: Offset::zero(),
-        }
-    }
+
     /// Equality check for Tokens. Since [Token] does not store text info,
     /// a source is needed to check equality. This equality does not check
     /// position (offset, line, and column).
-    pub fn eq(&self, other: &Token, source: &'a str) -> bool {
+    pub fn eq(&self, other: &Token, source: &'src str) -> bool {
         self.kind == other.kind
             && match (self.kind, other.kind) {
                 (
@@ -355,11 +351,11 @@ impl<'a> Token {
 
     /// Like [Token::eq] but also checks equality of position (offset, line,
     /// and column).
-    pub fn eq_all(&self, other: &Token, source: &'a str) -> bool {
+    pub fn eq_all(&self, other: &Token, source: &'src str) -> bool {
         self.eq(other, source) && self.offset == other.offset
     }
 
-    pub fn eq_dtype(&self, other: &Token, source: &'a str) -> bool {
+    pub fn eq_dtype(&self, other: &Token, source: &'src str) -> bool {
         match (&self.kind, &other.kind) {
             (TokenKind::Dono, TokenKind::Dono)
             | (
@@ -390,19 +386,16 @@ impl<'a> Token {
     /// Returns default token with kind [TokenKind::EOF] as error if it cannot recognize the str
     /// # Examples
     /// ```
-    /// let tok = Token::from_str("chan", Offset::new(0, 4), (0, 0));
+    /// let tok = Token::from_str("chan", Offset::new(0, 4));
     /// assert_eq!(
     ///     tok,
-    ///     Ok(
-    ///         Token::new(
-    ///             TokenKind::Chan,
-    ///             Offset::new(0, 4),
-    ///             (0, 0),
-    ///         ),
-    ///     ),
+    ///     Ok(Token::new(
+    ///         TokenKind::Chan,
+    ///         Offset::new(0, 4),
+    ///     )),
     /// );
     ///
-    /// let unknown = Token::from_str("@", Offset::new(0, 1), (0, 0));
+    /// let unknown = Token::from_str("@", Offset::new(0, 1));
     /// assert_eq!(tok, Err(Token::default()));
     /// ```
     pub fn from_str(text: &str, offset: Offset) -> Result<Self, Self> {

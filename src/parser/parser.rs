@@ -1704,3 +1704,518 @@ impl MissingParserErrorHeader {
         }
     }
 }
+
+// ERROR RECOVERY {{{
+
+/// Stores the expected and actual value of an expect operation.
+///
+/// Expectation allows an action to be done lazily when the expect operation is
+/// true. Action when ok can be none (unit `()`) as well. Afterwards, the error
+/// can be recovered from by using recovery strategies (ignoring error as well).
+#[derive(Debug)]
+struct Expectation<'src, 'parser> {
+    pub expected: Vec<TokenKind>,
+    pub actual: Token,
+    pub parser: &'parser mut Parser<'src>,
+    ok: bool,
+}
+impl<'src, 'parser> Expectation<'src, 'parser> {
+    pub fn new(
+        expected: Vec<TokenKind>,
+        actual: Token,
+        parser: &'parser mut Parser<'src>,
+        ok: bool,
+    ) -> Self {
+        Self {
+            expected,
+            actual,
+            parser,
+            ok,
+        }
+    }
+    /// Adds an action to be done when the expect operation is ok, which can
+    /// be chained with `or_recover()` to chain recovery strategies, or ignore the
+    /// error.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// let dtype = self.expect_peek_is_type()
+    ///     .ok_then(|parser, actual| parser.parse_data_type(actual))
+    ///     .ignore_err();
+    ///     .finish();
+    /// ```
+    pub fn ok_then<O, R>(self, then: O) -> OkThen<'src, 'parser, O, R>
+    where
+        O: FnMut(&mut Parser, Token) -> Result<R, ()>,
+        R: Default,
+    {
+        OkThen {
+            expectation: self,
+            ok_action: then,
+        }
+    }
+    /// Do not do an action when the expect operation failed and just do an
+    /// action when recovering. This can be chained with recovery strategies
+    /// (like ignore error).
+    ///
+    /// Useful when you want to ignore the token because it does not need to
+    /// be parsed
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// self.expect_peek_is(TokenKind::Dash)
+    ///     .recover()
+    ///     .skip_until_peek_is_type()
+    ///     .finish();
+    ///
+    /// let dtype = self.expect_peek_is_type()
+    ///     .ok_then(|parser, actual| parser.parse_data_type(actual))
+    ///     .ignore_err();
+    ///     .finish();
+    /// ```
+    pub fn recover<O, R: Default>(self) -> Recovery<'src, 'parser, (), R> {
+        Recovery::<(), R> {
+            expectation: self,
+            ok_action: (),
+            rtype: PhantomData,
+        }
+    }
+}
+
+struct OkThen<'src, 'parser, O, R>
+where
+    O: FnMut(&mut Parser, Token) -> Result<R, ()>,
+    R: Default,
+{
+    expectation: Expectation<'src, 'parser>,
+    ok_action: O,
+}
+impl<'src, 'parser, O, R> OkThen<'src, 'parser, O, R>
+where
+    O: FnMut(&mut Parser, Token) -> Result<R, ()>,
+    R: Default,
+{
+    /// Add a recovery strategy when the expect operation failed, along with
+    /// the ok action already given.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //    ^^^^
+    /// self.expect_peek_is(TokenKind::Identifier)
+    ///     .ok_then(|parser, actual| Ok(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Dash)
+    ///     .finish()
+    /// ```
+    pub fn or_recover(self) -> Recovery<'src, 'parser, O, R> {
+        Recovery {
+            expectation: self.expectation,
+            ok_action: self.ok_action,
+            rtype: PhantomData,
+        }
+    }
+    /// Do not add a recovery strategy and ignore the error when the expect
+    /// operation failed.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// self.expect_peek_is(TokenKind::Dash)
+    ///     .ok_then(|parser, actual| {
+    ///         parser.advance()
+    ///         parser.parse_data_type(parser.curr_tok()))
+    ///     })
+    ///     .ignore_err()
+    ///     .finish()
+    /// ```
+    pub fn ignore_err(self) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)> {
+        FinishRecovery {
+            expectation: self.expectation,
+            ok_action: self.ok_action,
+            err_action: |_| {},
+            rtype: PhantomData,
+            header: None,
+            context: None,
+        }
+    }
+    /// Do the ok action when the expect operation is ok. Otherwise, add an
+    /// error without recovering.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// self.expect_peek_is_type()
+    ///     .ok_then(|parser, actual| parser.parse_data_type(actual))
+    ///     .must()
+    /// ```
+    pub fn must(mut self) -> Result<R, ()> {
+        if self
+            .expectation
+            .expected
+            .contains(&self.expectation.actual.kind)
+        {
+            (self.ok_action)(self.expectation.parser, self.expectation.actual)
+        } else {
+            self.expectation.parser.errors.push(ParserError::Unexpected(
+                UnexpectedTokenError::new(
+                    self.expectation.parser.source,
+                    self.expectation.parser.line_starts,
+                    self.expectation.actual,
+                    self.expectation.expected,
+                    None,
+                    None,
+                ),
+            ));
+            Err(())
+        }
+    }
+}
+
+/// Helper trait for extracting the ok action from both a closure and a unit.
+/// This is to allow `()` to be passed as an ok action when wanting to ignore
+/// the ok case and either: just want to recover, or ignore error aka ignoring
+/// both cases.
+trait OkAction<R> {
+    /// Extract the ok action, whether is is a unit `()` or an actual action
+    fn call_ok(self, parser: &mut Parser, token: Token) -> Result<R, ()>;
+}
+impl<R: Default> OkAction<R> for () {
+    fn call_ok(self, _: &mut Parser, _: Token) -> Result<R, ()> {
+        Ok(R::default())
+    }
+}
+impl<O, R> OkAction<R> for O
+where
+    O: FnMut(&mut Parser, Token) -> Result<R, ()>,
+    R: Default,
+{
+    fn call_ok(mut self, parser: &mut Parser, token: Token) -> Result<R, ()> {
+        self(parser, token)
+    }
+}
+
+/// Contains different recovery strategies with limiting local errors.
+struct Recovery<'src, 'parser, O, R>
+where
+    O: OkAction<R>,
+    R: Default,
+{
+    expectation: Expectation<'src, 'parser>,
+    ok_action: O,
+    rtype: PhantomData<R>,
+}
+impl<'src, 'parser, O, R> Recovery<'src, 'parser, O, R>
+where
+    O: OkAction<R>,
+    R: Default,
+{
+    /// Generic skip until a condition is met.
+    /// # Example
+    /// ```
+    /// self.expect_peek_is(TokenKind::LBrace)
+    ///     .recover()
+    ///     .skip_until(|parser| parser.peek_tok_nth(1).kind == TokenKind::RBrace)
+    ///     .finish()
+    /// ```
+    pub fn skip_until<C>(
+        self,
+        mut condition: C,
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)>
+    where
+        C: FnMut(&mut Parser) -> bool,
+    {
+        FinishRecovery {
+            expectation: self.expectation,
+            ok_action: self.ok_action,
+            err_action: move |parser| {
+                while !condition(parser) {
+                    parser.advance(1)
+                }
+            },
+            rtype: PhantomData,
+            header: None,
+            context: None,
+        }
+    }
+    /// Generic skip one if a condition is met.
+    /// # Example
+    /// ```
+    /// self.expect_peek_is_type()
+    ///     .recover()
+    ///     .skip_one_if(|parser| parser.peek_tok_is(TokenKind::Terminator))
+    ///     .finish()
+    /// ```
+    pub fn skip_one_if<C>(
+        self,
+        mut condition: C,
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)>
+    where
+        C: FnMut(&mut Parser) -> bool,
+    {
+        FinishRecovery {
+            expectation: self.expectation,
+            ok_action: self.ok_action,
+            err_action: move |parser| {
+                if condition(parser) {
+                    parser.advance(1)
+                }
+            },
+            rtype: PhantomData,
+            header: None,
+            context: None,
+        }
+    }
+    /// Generic skip while the condition is being met.
+    /// # Example
+    /// ```
+    /// self.expect_peek_is(TokenKind::RParen)
+    ///     .recover()
+    ///     .skip_while(|parser| parser.curr_tok_is(TokenKind::Comma))
+    ///     .finish()
+    /// ```
+    #[inline(always)]
+    pub fn skip_while<C>(
+        self,
+        mut condition: C,
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)>
+    where
+        C: FnMut(&mut Parser) -> bool,
+    {
+        self.skip_until(move |parser| !condition(parser))
+    }
+    /// Skip until the peek token is the one of the given token kinds
+    /// # Example
+    /// ```
+    /// // (aqua-chan, shion-chan, ojou-chan,,,) {
+    /// //                                   ^
+    /// self.expect_peek_is(TokenKind::RParen)
+    ///     .recover()
+    ///     .skip_until_peek_is_in(&[TokenKind::RParen, TokenKind::LBrace])
+    ///     .finish()
+    /// ```
+    pub fn skip_until_peek_is_in(
+        self,
+        kinds: &'src [TokenKind],
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser) + use<'src, O, R>> {
+        self.skip_until(|parser| kinds.contains(&parser.peek_tok().kind))
+    }
+    /// Skip until the peek token is the given token kind
+    /// # Example
+    /// ```
+    /// // (aqua-chan, shion-chan, ojou-chan,,,) {
+    /// //                                   ^
+    /// self.expect_peek_is(TokenKind::RParen)
+    ///     .recover()
+    ///     .skip_until_peek_is(TokenKind::RParen)
+    ///     .finish()
+    /// ```
+    pub fn skip_until_peek_is(
+        self,
+        kind: TokenKind,
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)> {
+        self.skip_until(move |parser| parser.peek_tok().kind == kind)
+    }
+    /// Skip until the peek token is a type
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// self.expect_peek_is(TokenKind::Dash)
+    ///     .recover()
+    ///     .skip_until_peek_is_type()
+    ///     .finish()
+    /// ```
+    pub fn skip_until_peek_is_type(
+        self,
+    ) -> FinishRecovery<'src, 'parser, O, R, impl FnMut(&mut Parser)> {
+        self.skip_until(|parser| {
+            matches!(
+                parser.peek_tok().kind,
+                TokenKind::Type
+                    | TokenKind::Chan
+                    | TokenKind::Kun
+                    | TokenKind::Senpai
+                    | TokenKind::Kouhai
+                    | TokenKind::San
+                    | TokenKind::Sama
+                    | TokenKind::Dono
+            )
+        })
+    }
+    /// Allows to limit local errors by passing in an error count. The error
+    /// count is assumed to be accumulated by the consumer outside this struct.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //        ^
+    /// let error_count = 0;
+    /// let MAX_ERROR_COUNT = 3;
+    ///
+    /// let updated_count = self.expect_peek_is(TokenKind::Dash)
+    ///     .recover()
+    ///     .limit_errors(error_count)
+    ///     .skip_until_peek_is_type()
+    ///     .finish_with_error_count(error_count);
+    /// ```
+    pub fn limit_errors(mut self, error_count: usize) -> Self {
+        if error_count > MAX_LOCAL_ERROR_COUNT {
+            self.expectation.ok = true
+        }
+        self
+    }
+}
+
+struct FinishRecovery<'src, 'parser, O, R, E>
+where
+    O: OkAction<R>,
+    R: Default,
+    E: FnMut(&mut Parser),
+{
+    expectation: Expectation<'src, 'parser>,
+    ok_action: O,
+    err_action: E,
+    rtype: PhantomData<R>,
+    header: Option<&'src str>,
+    context: Option<&'src str>,
+}
+impl<'src, 'parser, O, R, E> FinishRecovery<'src, 'parser, O, R, E>
+where
+    O: OkAction<R>,
+    R: Default,
+    E: FnMut(&mut Parser),
+{
+    /// Returns the ok variant of the result of the ok action when the exepct
+    /// operation is ok, given any. If no ok action was given, a unit type will
+    /// be returned.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// let dtype = self.expect_peek_is_type()
+    ///     .ok_action(|parser, actual| parser.parse_data_type(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Assign)
+    ///     .finish();
+    ///
+    /// // hi aqua-chan = 10~
+    /// //              ^
+    /// let unit: () = self.expect_peek_is(TokenKind::Assign)
+    ///     .recover()
+    ///     .skip_until_peek_is(TokenKind::Terminator)
+    ///     .finish();
+    /// ```
+    pub fn finish(self) -> R {
+        self.finish_as_result().unwrap_or_default()
+    }
+    /// Just like [FinishRecovery::finish] but with the error count. Error
+    /// count is incremented when an error occured, otherwise it stays the same.
+    /// # Example
+    /// ```
+    /// let error_count = 0;
+    ///
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// let (dtype, error_count): (DataType, usize) = self
+    ///     .expect_peek_is_type()
+    ///     .ok_action(|parser, actual| parser.parse_data_type(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Assign)
+    ///     .finish_with_error_count(error_count);
+    ///
+    /// // hi aqua-chan = 10~
+    /// //              ^
+    /// let (unit, error_count): ((), usize) = self
+    ///     .expect_peek_is(TokenKind::Assign)
+    ///     .recover()
+    ///     .skip_until_peek_is(TokenKind::Terminator)
+    ///     .finish_with_error_count(error_count);
+    /// ```
+    pub fn finish_with_error_count(self, error_count: usize) -> (R, usize) {
+        match self.finish_as_result() {
+            Ok(res) => (res, error_count),
+            Err(()) => (R::default(), error_count + 1),
+        }
+    }
+    /// Just like [FinishRecovery::finish] but with as a Result.
+    /// # Example
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //         ^^^^
+    /// let dtype = self.expect_peek_is_type()
+    ///     .ok_action(|parser, actual| parser.parse_data_type(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Assign)
+    ///     .finish_as_result()
+    ///     .unwrap_or_else(|_| {
+    ///         println!("Your logging message or something");
+    ///         DataType::default()
+    ///     });
+    ///
+    /// // hi aqua-chan = 10~
+    /// //              ^
+    /// let unit: () = self.expect_peek_is(TokenKind::Assign)
+    ///     .recover()
+    ///     .skip_until_peek_is(TokenKind::Terminator)
+    ///     .finish_as_result()
+    ///     .expect("Your panic message or something");
+    /// ```
+    pub fn finish_as_result(mut self) -> Result<R, ()> {
+        if self.expectation.ok {
+            self.ok_action
+                .call_ok(self.expectation.parser, self.expectation.actual)
+                .map_err(|_| (self.err_action)(self.expectation.parser))
+        } else {
+            (self.err_action)(self.expectation.parser);
+            self.expectation.parser.errors.push(ParserError::Unexpected(
+                UnexpectedTokenError::new(
+                    self.expectation.parser.source,
+                    self.expectation.parser.line_starts,
+                    self.expectation.actual,
+                    self.expectation.expected,
+                    self.header,
+                    self.context,
+                ),
+            ));
+            Err(())
+        }
+    }
+    /// Adds an error header to the error message when the expect operation
+    /// failed.
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //    ^^^^
+    /// let id = self
+    ///     .expect_peek_is(TokenKind::Identifier)
+    ///     .ok_then(|_, actual| Ok(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Dash)
+    ///     .error_header("MISSING FUNCTION NAME")
+    ///     .finish();
+    /// ```
+    pub fn error_header(mut self, header: &'src str) -> Self {
+        self.header = Some(header);
+        self
+    }
+    /// Adds an error context to the error message when the expect operation
+    /// failed.
+    /// ```
+    /// // hi aqua-chan = 10~
+    /// //    ^^^^
+    /// let id = self
+    ///     .expect_peek_is(TokenKind::Identifier)
+    ///     .ok_then(|_, actual| Ok(actual))
+    ///     .or_recover()
+    ///     .skip_until_peek_is(TokenKind::Dash)
+    ///     .error_header("MISSING DECLARATION NAME")
+    ///     .error_context("Bruh, you need to name your variables...")
+    ///     .finish();
+    /// ```
+    pub fn error_context(mut self, header: &'src str) -> Self {
+        self.context = Some(header);
+        self
+    }
+}
+
+// }}}

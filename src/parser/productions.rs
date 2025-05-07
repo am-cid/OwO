@@ -212,7 +212,7 @@ impl<'a> Production<'a> for Function {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Group {
     pub id: Token,
     pub fields: Vec<GroupField>,
@@ -327,7 +327,7 @@ impl<'a> Production<'a> for GroupMethod {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Contract {
     pub id: Token,
     pub signatures: Vec<FnSignature>,
@@ -437,7 +437,7 @@ impl<'a> Production<'a> for FnSignature {
 //     }
 // }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Param {
     pub id: Token,
     pub dtype: DataType,
@@ -470,7 +470,7 @@ impl<'a> Production<'a> for Param {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct GroupField {
     pub id: Token,
     pub dtype: DataType,
@@ -592,8 +592,13 @@ impl<'a> Production<'a> for Statement {
         }
     }
 }
+impl Default for Statement {
+    fn default() -> Self {
+        Self::Expression(Expression::default())
+    }
+}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Declaration {
     pub id: Token,
     pub dtype: Option<DataType>,
@@ -642,7 +647,7 @@ impl<'a> Production<'a> for Declaration {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Assignment {
     pub id: Assignable,
     pub assign_op: Token,
@@ -675,7 +680,7 @@ impl<'a> Production<'a> for Assignment {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct IfStatement {
     pub condition: Expression,
     pub body: Body,
@@ -733,7 +738,7 @@ impl<'a> Production<'a> for IfStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ElifStatement {
     pub condition: Expression,
     pub body: Body,
@@ -764,7 +769,7 @@ impl<'a> Production<'a> for ElifStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ForLoop {
     pub init: Declaration,
     pub condition: Expression,
@@ -809,7 +814,7 @@ impl<'a> Production<'a> for ForLoop {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ForEach {
     pub item_id: Token,
     pub collection: Expression,
@@ -843,7 +848,7 @@ impl<'a> Production<'a> for ForEach {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MashStatement {
     pub expr: Expression,
     pub cases: Vec<Case>,
@@ -900,7 +905,7 @@ impl<'a> Production<'a> for MashStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Case {
     pub case_type: DataType,
     pub body: Body,
@@ -934,7 +939,7 @@ impl<'a> Production<'a> for Case {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ReturnStatement {
     pub expr: Expression,
     pos: Offset,
@@ -1058,6 +1063,11 @@ impl<'a> Position<'a> for Expression {
 impl<'a> Production<'a> for Expression {
     fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
         self.as_production().to_formatted_string(source, n)
+    }
+}
+impl Default for Expression {
+    fn default() -> Self {
+        Self::Token(Token::default())
     }
 }
 impl From<Accessed> for Expression {
@@ -2063,6 +2073,11 @@ impl<'a> Production<'a> for Assignable {
             Self::Indexed(idx) => idx.to_formatted_string(source, n),
             Self::Access(access) => access.to_formatted_string(source, n),
         }
+    }
+}
+impl Default for Assignable {
+    fn default() -> Self {
+        Self::Token(Token::default())
     }
 }
 impl TryFrom<Expression> for Assignable {
