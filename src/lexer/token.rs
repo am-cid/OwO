@@ -315,6 +315,17 @@ impl TokenKind {
                 | Self::Dono
         )
     }
+    pub fn is_assign(&self) -> bool {
+        matches!(
+            self,
+            Self::Assign
+                | Self::PlusEqual
+                | Self::DashEqual
+                | Self::MultiplyEqual
+                | Self::DivideEqual
+                | Self::ModuloEqual
+        )
+    }
 }
 
 // }}}
