@@ -283,7 +283,7 @@ impl TokenKind {
             Self::Dono,
         ]
     }
-    pub fn assign_ops() -> Vec<Self> {
+    pub fn assign_operators() -> Vec<Self> {
         vec![
             Self::Assign,
             Self::PlusEqual,
@@ -293,13 +293,21 @@ impl TokenKind {
             Self::ModuloEqual,
         ]
     }
-    pub fn math_ops() -> Vec<Self> {
+    pub fn operators() -> Vec<Self> {
         vec![
             Self::Plus,
             Self::Dash,
             Self::Multiply,
             Self::Divide,
             Self::Modulo,
+            Self::Equal,
+            Self::NotEqual,
+            Self::LessThan,
+            Self::LessEqual,
+            Self::GreaterThan,
+            Self::GreaterEqual,
+            Self::And,
+            Self::Or,
         ]
     }
     pub fn is_type(&self) -> bool {
@@ -315,7 +323,25 @@ impl TokenKind {
                 | Self::Dono
         )
     }
-    pub fn is_assign(&self) -> bool {
+    pub fn is_operator(&self) -> bool {
+        matches!(
+            self,
+            Self::Plus
+                | Self::Dash
+                | Self::Multiply
+                | Self::Divide
+                | Self::Modulo
+                | Self::Equal
+                | Self::NotEqual
+                | Self::LessThan
+                | Self::LessEqual
+                | Self::GreaterThan
+                | Self::GreaterEqual
+                | Self::And
+                | Self::Or,
+        )
+    }
+    pub fn is_assign_operator(&self) -> bool {
         matches!(
             self,
             Self::Assign
@@ -608,10 +634,6 @@ impl Offset {
     pub fn overlaps(&self, other: &Self) -> bool {
         self.end >= other.start && self.start <= other.end
     }
-    // /// makes sure to include one token before and after
-    // pub fn overlaps(&self, other: &Self) -> bool {
-    //     self.end >= other.start && self.start <= other.end
-    // }
 }
 
 // }}}
@@ -621,7 +643,7 @@ impl Offset {
 /// Position of a token or item within source text. Provides methods for
 /// accessing offset-based and line/column-based location data in both
 /// zero-based and one-based (buffer-friendly) forms.
-pub trait Position<'a> {
+pub trait Position<'src> {
     /// Returns the [Offset]
     /// of this position, which includes the
     /// starting and ending indices within the source text.
@@ -854,7 +876,7 @@ pub trait Position<'a> {
     /// let token = Token::from_str("aqua", offset);
     /// assert_eq!(token.source_str(source), "aqua");
     /// ```
-    fn source_str(&self, source: &'a str) -> &'a str {
+    fn source_str(&self, source: &'src str) -> &'src str {
         source.get(self.offset().range()).unwrap_or_default()
     }
 }

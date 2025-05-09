@@ -32,7 +32,7 @@ pub struct Program {
     pub groups: Vec<Group>,
     pub methods: Vec<GroupMethod>,
     pub contracts: Vec<Contract>,
-    pub globals: Vec<Statement>,
+    pub globals: Vec<Declaration>,
     pos: Offset,
 }
 impl<'a> Program {
@@ -42,24 +42,17 @@ impl<'a> Program {
         groups: Vec<Group>,
         methods: Vec<GroupMethod>,
         contracts: Vec<Contract>,
-        globals: Vec<Statement>,
+        globals: Vec<Declaration>,
         source: &'a str,
-        end_pos: (usize, usize),
-    ) -> Result<Self, NoMainError<'a>> {
-        match main {
-            Some(main) => Ok(Self {
-                main,
-                functions,
-                groups,
-                methods,
-                contracts,
-                globals,
-                pos: Offset::new(0, source.len()),
-            }),
-            None => Err(NoMainError::new(
-                source.lines().nth(end_pos.0).unwrap_or_default(),
-                (end_pos.0 + 1, end_pos.1 + 1),
-            )),
+    ) -> Self {
+        Self {
+            main: main.unwrap_or_default(),
+            functions,
+            groups,
+            methods,
+            contracts,
+            globals,
+            pos: Offset::new(0, source.len()),
         }
     }
 }
