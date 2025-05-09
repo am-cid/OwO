@@ -57,7 +57,7 @@ pub struct Parser<'src> {
     pos: usize,
     prefix_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Expression, ()>>,
     infix_parse_fns: HashMap<TokenKind, fn(&mut Self, Expression) -> Result<Expression, ()>>,
-    body_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Result<Statement, ()>>,
+    body_parse_fns: HashMap<TokenKind, fn(&mut Self) -> Statement>,
 }
 impl<'src> Parser<'src> {
     // TODO: expected values for some are inaccurate. For example:
@@ -168,15 +168,6 @@ impl<'src> Parser<'src> {
             self.pos += 1;
         }
     }
-    /// reverses cursor n times
-    fn reverse(&mut self, n: usize) {
-        for _ in 0..n {
-            if self.curr_tok().kind == TokenKind::EOF {
-                return;
-            }
-            self.pos -= 1;
-        }
-    }
     /// advances cursor n times if the condition is met
     fn advance_if<F>(&mut self, n: usize, mut condition: F)
     where
@@ -245,7 +236,7 @@ impl<'src> Parser<'src> {
                 },
                 TokenKind::Group => groups.push(self.parse_group()),
                 TokenKind::Contract => contracts.push(self.parse_contract()),
-                TokenKind::Hi => globals.push(self.parse_declaration_statement()?),
+                TokenKind::Hi => globals.push(self.parse_declaration_statement()),
                 _ => {
                     self.unexpected_token_error(
                         Some("INVALID GLOBAL TOKEN"),
@@ -559,7 +550,7 @@ impl<'src> Parser<'src> {
             .ignore()
             .finish_result()
             .is_ok();
-        let signatures = if found_opening && self.peek_tok_is(TokenKind::RBrace) {
+        if found_opening && self.peek_tok_is(TokenKind::RBrace) {
             self.empty_body_error(
                 self.curr_tok(),
                 self.peek_tok(),
@@ -570,10 +561,8 @@ impl<'src> Parser<'src> {
                     .nth(self.peek_tok().line(&self.line_starts))
                     .unwrap_or_default(),
             );
-            vec![]
-        } else {
-            self.parse_fn_signatures()
-        };
+        }
+        let signatures = self.parse_fn_signatures();
         self.expect_peek_is_(TokenKind::RBrace)
             .recover()
             .skip_until_peek_is_in(&[
@@ -739,7 +728,7 @@ impl<'src> Parser<'src> {
                 .map(|(&tokens, _)| tokens)
                 .collect::<Vec<_>>(),
         };
-        self.expect_peek_is_in_(&expected)
+        self.peek_is_in_(&expected)
             .ok_then(|parser, actual| {
                 let body_parser = match body_type {
                     BodyType::For => parser
@@ -755,7 +744,7 @@ impl<'src> Parser<'src> {
                         .collect::<HashMap<_, _>>(),
                 };
                 match body_parser.get(&actual.kind) {
-                    Some(stmt_parser) => stmt_parser(parser),
+                    Some(stmt_parser) => Ok(stmt_parser(parser)),
                     None => Err(()),
                 }
             })
@@ -868,16 +857,28 @@ impl<'src> Parser<'src> {
     /// Just calls [Parser::parse_declaration] and maps the [Declaration] to a
     /// `Result<Statement, ()>`
     ///
-    /// starts with [TokenKind::Hi] in current
+    /// starts with [TokenKind::Hi] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_declaration_statement(&mut self) -> Result<Statement, ()> {
-        Ok(Statement::Declaration(self.parse_declaration()))
+    fn parse_declaration_statement(&mut self) -> Statement {
+        Statement::Declaration(self.parse_declaration())
     }
 
-    /// starts with [TokenKind::Hi] in current
+    /// starts with [TokenKind::Hi] in peek
     /// ends with [TokenKind::Terminator] in current
     fn parse_declaration(&mut self) -> Declaration {
-        let start = self.curr_tok();
+        let (start, error_count) = self
+            .expect_peek_is_(TokenKind::Hi)
+            .ok_then(|_, actual| Ok(actual))
+            .or_recover()
+            .skip_until(|parser| {
+                parser.peek_tok_is_in(&[
+                    TokenKind::Identifier,
+                    TokenKind::Dash,
+                    TokenKind::Terminator,
+                ]) || parser.peek_tok_is_type()
+                    || parser.peek_tok_is_assign()
+            })
+            .finish_with_error_count();
         let (id, error_count) = self
             .expect_peek_is_(TokenKind::Identifier)
             .ok_then(|_, actual| Ok(actual))
@@ -887,6 +888,7 @@ impl<'src> Parser<'src> {
                     || parser.peek_tok_is_type()
                     || parser.peek_tok_is_assign()
             })
+            .limit_errors(error_count)
             .finish_with_error_count();
 
         let (dtype, error_count) = if self.peek_tok_is(TokenKind::Dash) {
@@ -966,26 +968,34 @@ impl<'src> Parser<'src> {
         )
     }
 
-    /// starts with [TokenKind::Wetuwn] in current
+    /// starts with [TokenKind::Wetuwn] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_return(&mut self) -> Result<Statement, ()> {
-        let start = self.curr_tok();
+    fn parse_return(&mut self) -> Statement {
+        let start = self
+            .expect_peek_is_(TokenKind::Wetuwn)
+            .ok_then(|_, actual| Ok(actual))
+            .ignore_err()
+            .finish();
         let expr = self
             .parse_expression(Precedence::Lowest)
             .unwrap_or_default();
         self.expect_peek_is_(TokenKind::Terminator)
             .ignore()
             .finish();
-        Ok(Statement::Return(ReturnStatement::new(
+        Statement::Return(ReturnStatement::new(
             expr,
             (start.offset.start, self.curr_tok().offset.end),
-        )))
+        ))
     }
 
-    /// starts with [TokenKind::Iwf] in current
+    /// starts with [TokenKind::Iwf] in peek
     /// ends with [TokenKind::RBrace] in current
-    fn parse_if(&mut self) -> Result<Statement, ()> {
-        let start = self.curr_tok();
+    fn parse_if(&mut self) -> Statement {
+        let start = self
+            .expect_peek_is_(TokenKind::Iwf)
+            .ok_then(|_, actual| Ok(actual))
+            .ignore_err()
+            .finish();
         let condition = self
             .parse_expression(Precedence::Lowest)
             .unwrap_or_default();
@@ -1014,13 +1024,13 @@ impl<'src> Parser<'src> {
             }
             _ => None,
         };
-        Ok(Statement::If(IfStatement::new(
+        Statement::If(IfStatement::new(
             condition,
             body,
             elifs,
             else_block,
             (start.offset.start, self.curr_tok().offset.end),
-        )))
+        ))
     }
 
     /// starts with [TokenKind::Ewif] in peek
@@ -1062,18 +1072,24 @@ impl<'src> Parser<'src> {
     /// - for loop: `fow hi i-chan = 0~ i < n~ i+1 { ...body }`
     /// - for each: `fow item in collection { ...body }`
     ///
-    /// starts with [TokenKind::Fow] in current
+    /// starts with [TokenKind::Fow] in peek
     /// ends with [TokenKind::RBrace] in current
-    fn parse_for(&mut self) -> Result<Statement, ()> {
+    fn parse_for(&mut self) -> Statement {
+        self.expect_peek_is_(TokenKind::Fow).ignore().finish();
         match self.peek_tok().kind {
-            TokenKind::Hi => Ok(self.parse_for_loop()),
-            TokenKind::Identifier => Ok(self.parse_for_each()),
-            _ => Err(self.unexpected_token_error(
-                Some("INVALID FOW INITIALZATION"),
-                Some("Declare a variable (hi i = 1~ i<4~ i+1) or use an iterable (i in [1,2,3])"),
-                self.peek_tok(),
-                vec![TokenKind::Hi, TokenKind::Identifier],
-            )),
+            TokenKind::Hi => self.parse_for_loop(),
+            TokenKind::Identifier => self.parse_for_each(),
+            _ => {
+                self.unexpected_token_error(
+                    Some("INVALID FOW INITIALZATION"),
+                    Some(
+                        "Declare a variable (hi i = 1~ i<4~ i+1) or use an iterable (i in [1,2,3])",
+                    ),
+                    self.peek_tok(),
+                    vec![TokenKind::Hi, TokenKind::Identifier],
+                );
+                Statement::default()
+            }
         }
     }
 
@@ -1142,35 +1158,52 @@ impl<'src> Parser<'src> {
     }
 
     // TODO: break statement position info does not include Terminator
-    /// starts with [TokenKind::Bweak] in current
+    /// starts with [TokenKind::Bweak] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_break(&mut self) -> Result<Statement, ()> {
-        let tok = self.curr_tok();
+    fn parse_break(&mut self) -> Statement {
+        let tok = self
+            .expect_peek_is_(TokenKind::Bweak)
+            .ok_then(|_, actual| Ok(actual))
+            .ignore_err()
+            .finish();
         self.expect_peek_is_(TokenKind::Terminator)
             .ignore()
             .finish();
-        Ok(Statement::Break(tok))
+        Statement::Break(tok)
     }
 
     // TODO: continue statement position info does not include Terminator
-    /// starts with [TokenKind::Continue] in current
+    /// starts with [TokenKind::Continue] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_continue(&mut self) -> Result<Statement, ()> {
-        let tok = self.curr_tok();
+    fn parse_continue(&mut self) -> Statement {
+        let tok = self
+            .expect_peek_is_(TokenKind::Continue)
+            .ok_then(|_, actual| Ok(actual))
+            .ignore_err()
+            .finish();
         self.expect_peek_is_(TokenKind::Terminator)
             .ignore()
             .finish();
-        Ok(Statement::Continue(tok))
+        Statement::Continue(tok)
     }
 
-    /// starts with [TokenKind::Mash] in current
+    /// starts with [TokenKind::Mash] in peek
     /// ends with [TokenKind::RBrace] in current
-    fn parse_mash(&mut self) -> Result<Statement, ()> {
-        let start = self.curr_tok();
-        let expr = self.parse_expression(Precedence::Lowest)?;
-        self.expect_peek_is(TokenKind::LBrace)?;
-        // disallow empty bodies
-        if self.peek_tok_is(TokenKind::RBrace) {
+    fn parse_mash(&mut self) -> Statement {
+        let start = self
+            .expect_peek_is_(TokenKind::Mash)
+            .ok_then(|_, actual| Ok(actual))
+            .ignore_err()
+            .finish();
+        let expr = self
+            .parse_expression(Precedence::Lowest)
+            .unwrap_or_default();
+        let found_opening = self
+            .expect_peek_is_(TokenKind::LBrace)
+            .ignore()
+            .finish_result()
+            .is_ok();
+        let cases = if found_opening && self.peek_tok_is(TokenKind::RBrace) {
             self.empty_body_error(
                 self.curr_tok(),
                 self.peek_tok(),
@@ -1181,44 +1214,50 @@ impl<'src> Parser<'src> {
                     .nth(self.peek_tok().line(&self.line_starts))
                     .unwrap_or_default(),
             );
-            self.advance(1);
-            return Err(());
-        }
-        let mut cases: Vec<Case> = vec![];
-        while self.peek_tok_is_type() {
-            cases.push(self.parse_case()?);
-        }
+            vec![]
+        } else {
+            let mut cases: Vec<Case> = vec![];
+            while self.peek_tok_is_type() {
+                cases.push(self.parse_case());
+            }
+            cases
+        };
         let default = match self.peek_tok().kind {
             TokenKind::Default => {
                 self.advance(1);
-                self.expect_peek_is(TokenKind::Colon)?;
-                Some(self.parse_case_body()?)
+                self.expect_peek_is_(TokenKind::Colon).ignore().finish();
+                Some(self.parse_case_body())
             }
             _ => None,
         };
-        let offset_end = self
-            .expect_peek_is(TokenKind::RBrace)
-            .and_then(|tok| Ok(tok.offset.end))?;
-        Ok(Statement::Mash(MashStatement::new(
+        self.expect_peek_is_(TokenKind::RBrace).ignore().finish();
+        Statement::Mash(MashStatement::new(
             expr,
             cases,
             default,
-            (start.offset.start, offset_end),
-        )))
+            (start.offset.start, self.curr_tok().offset.end),
+        ))
     }
 
     /// starts with a [DataType]'s first token in peek
     /// ends with a [DataType]'s first token in peek
-    fn parse_case(&mut self) -> Result<Case, ()> {
+    fn parse_case(&mut self) -> Case {
         let start = self.peek_tok();
         let case_type = self
-            .expect_peek_is_type()
-            .and_then(|tok| self.parse_data_type(tok))?;
+            .expect_peek_is_type_()
+            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ignore_err()
+            .finish();
         let body = self
-            .expect_peek_is(TokenKind::Colon)
-            .and_then(|_| self.parse_case_body())?;
-        let offset_end = self.curr_tok().offset.end;
-        Ok(Case::new(case_type, body, (start.offset.start, offset_end)))
+            .expect_peek_is_(TokenKind::Colon)
+            .ok_then(|parser, _| Ok(parser.parse_case_body()))
+            .ignore_err()
+            .finish();
+        Case::new(
+            case_type,
+            body,
+            (start.offset.start, self.curr_tok().offset.end),
+        )
     }
 
     /// starts with [TokenKind::Colon] in current
@@ -1226,11 +1265,10 @@ impl<'src> Parser<'src> {
     /// - [DataType]'s first token in peek (another case next)
     /// - [TokenKind::Default] in peek (default case next)
     /// - [TokenKind::RBrace] in peek (end of mash statement)
-    fn parse_case_body(&mut self) -> Result<Body, ()> {
-        let mut statements: Vec<Statement> = vec![];
+    fn parse_case_body(&mut self) -> Body {
         let start = self.curr_tok();
-        // disallow empty bodies
-        if self.peek_tok_is_type() || self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
+        let statements = if self.peek_tok_is_type()
+            || self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
         {
             self.empty_body_error(
                 self.curr_tok(),
@@ -1246,46 +1284,25 @@ impl<'src> Parser<'src> {
                     .nth(self.peek_tok().line(&self.line_starts))
                     .unwrap_or_default(),
             );
-            self.advance(1);
-            return Err(());
-        }
-        while !self.peek_tok_is_type()
-            && !self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
-        {
-            self.advance(1);
-            let stmt = match self.body_parse_fns.get(&self.curr_tok().kind) {
-                Some(parser) => parser(self)?,
-                None => {
-                    self.no_parsing_fn_error(
-                        MissingParserErrorHeader::Body,
-                        self.curr_tok(),
-                        self.body_parse_fns
-                            .clone()
-                            .into_iter()
-                            .map(|(tokens, _)| tokens)
-                            .collect::<Vec<_>>(),
-                    );
-                    return Err(());
-                }
-            };
-            statements.push(stmt);
-        }
+            vec![]
+        } else {
+            let mut statements: Vec<Statement> = vec![];
+            while !self.peek_tok_is_type()
+                && !self.peek_tok_is_in(&[TokenKind::Default, TokenKind::RBrace])
+            {
+                statements.push(self.parse_body_statement(BodyType::Mash));
+            }
+            statements
+        };
         let offset_end = match self.peek_tok().kind {
-            TokenKind::Type
-            | TokenKind::Chan
-            | TokenKind::Kun
-            | TokenKind::Senpai
-            | TokenKind::Kouhai
-            | TokenKind::San
-            | TokenKind::Sama
-            | TokenKind::Dono
-            | TokenKind::Default
-            | TokenKind::RBrace => self.curr_tok().offset.end,
+            kind if kind.is_type() || matches!(kind, TokenKind::Default | TokenKind::RBrace) => {
+                self.curr_tok().offset.end
+            }
             _ => {
                 unreachable!("parse_case_body: did not end at Default, Type, data types, or RBrace")
             }
         };
-        Ok(Body::new(statements, (start.offset.start, offset_end)))
+        Body::new(statements, (start.offset.start, offset_end))
     }
 
     /// This parses four possible ident statements: assignments,
@@ -1297,33 +1314,32 @@ impl<'src> Parser<'src> {
     /// aqua.scream() | voice_crack()~
     /// aqua~
     /// ```
-    /// starts with [TokenKind::Identifier] in current
+    /// starts with [TokenKind::Identifier] in peek
     /// ends with [TokenKind::Terminator] in current
-    fn parse_ident_statement(&mut self) -> Result<Statement, ()> {
-        let id = self.parse_ident_expression()?;
+    fn parse_ident_statement(&mut self) -> Statement {
+        let id = self.parse_ident_expression();
         match self.curr_tok().kind {
             TokenKind::Identifier | TokenKind::RBracket => match self.peek_tok().kind {
-                TokenKind::Assign
-                | TokenKind::PlusEqual
-                | TokenKind::DashEqual
-                | TokenKind::MultiplyEqual
-                | TokenKind::DivideEqual
-                | TokenKind::ModuloEqual => Ok(Statement::Assignment(self.parse_assignment(
-                    id.try_into().expect(
+                kind if kind.is_assign() => {
+                    Statement::Assignment(self.parse_assignment(id.try_into().expect(
                         r#"parse_ident_statement: ended at Ident/RBracket should be assignable"#,
-                    ),
-                )?)),
+                    )))
+                }
                 _ => {
-                    self.expect_peek_is(TokenKind::Terminator)?;
-                    Ok(Statement::Expression(id))
+                    self.expect_peek_is_(TokenKind::Terminator)
+                        .ignore()
+                        .finish();
+                    Statement::Expression(id)
                 }
             },
             TokenKind::RParen => {
-                self.expect_peek_is(TokenKind::Terminator)?;
+                self.expect_peek_is_(TokenKind::Terminator)
+                    .ignore()
+                    .finish();
                 match id {
-                    Expression::FnCall(fn_call) => Ok(Statement::FnCall(fn_call)),
-                    Expression::Access(AccessType::Method(method)) => Ok(Statement::Method(method)),
-                    Expression::Pipeline(pipe) => Ok(Statement::Pipeline(pipe)),
+                    Expression::FnCall(fn_call) => Statement::FnCall(fn_call),
+                    Expression::Access(AccessType::Method(method)) => Statement::Method(method),
+                    Expression::Pipeline(pipe) => Statement::Pipeline(pipe),
                     _ => unreachable!(
                         r#"parse_ident_statement: returned at RParen is neither FnCall, MethodAccess, or Pipeline"#
                     ),
@@ -1338,36 +1354,47 @@ impl<'src> Parser<'src> {
 
     /// starts with [TokenKind::Identifier] in current and [TokenKind::LParen] in peek
     /// ends with [TokenKind::RParen] in current
-    fn parse_fn_call(&mut self) -> Result<FnCall, ()> {
+    fn parse_fn_call(&mut self) -> FnCall {
         let id = self.curr_tok();
-        self.expect_peek_is(TokenKind::LParen)?;
-        let mut args: Vec<Expression> = vec![];
-        while !self.peek_tok_is(TokenKind::RParen) {
-            args.push(self.parse_expression(Precedence::Lowest)?);
-            self.allow_hanging_comma(TokenKind::RParen)?;
-        }
-        let offset_end = self
-            .expect_peek_is(TokenKind::RParen)
-            .and_then(|tok| Ok(tok.offset.end))?;
-        Ok(FnCall::new(
+        let args = self
+            .expect_peek_is_(TokenKind::LParen)
+            .ok_then(|parser, _| {
+                let mut args: Vec<Expression> = vec![];
+                while !parser.peek_tok_is(TokenKind::RParen) {
+                    args.push(
+                        parser
+                            .parse_expression(Precedence::Lowest)
+                            .unwrap_or_default(),
+                    );
+                    parser.allow_hanging_comma(TokenKind::RParen);
+                }
+                Ok(args)
+            })
+            .ignore_err()
+            .finish();
+        self.expect_peek_is_(TokenKind::RParen).ignore().finish();
+        FnCall::new(
             id,
             args,
             FnSignature::default(),
-            (id.offset.start, offset_end),
-        ))
+            (id.offset.start, self.curr_tok().offset.end),
+        )
     }
 
     /// Abstracts over different expression statement parsers. Each will parse
     /// an expression that may be followed by a pipe, which will lead to a
     /// pipeline statement.
     ///
-    /// starts with valid starting token for an [Expression] in current.
+    /// starts with valid starting token for an [Expression] in peek.
     /// ends with [TokenKind::Terminator] in current
-    fn parse_expression_statement(&mut self) -> Result<Statement, ()> {
-        self.reverse(1);
-        let expr = self.parse_expression(Precedence::Lowest)?;
-        self.expect_peek_is(TokenKind::Terminator)?;
-        Ok(Statement::Expression(expr))
+    fn parse_expression_statement(&mut self) -> Statement {
+        let expr = self
+            .parse_expression(Precedence::Lowest)
+            .unwrap_or_default();
+        self.expect_peek_is_(TokenKind::Terminator)
+            .ignore()
+            .finish();
+        Statement::Expression(expr)
     }
 
     // }}}
