@@ -74,9 +74,9 @@ Declare a variable in the format:
 hi <variable-name>-<variable-type> = <value-assigned>~
 hi aqua-chan = 1~
 ```
-The dash followed by the variable type is optional. Variables are immutable
-by default. To declare a mutable variable, put a `!` after the name or the type,
-depending on whether the type is declared.
+The dash followed by the variable type is immutable by default. To declare a
+mutable variable, put a `!` after the name or the type, depending on whether the
+type is declared.
 ```kotlin
 >_< both have type chan
 hi aqua-chan! = 10~
@@ -89,7 +89,7 @@ hi global-chan! = 99~
 
 fun main-san() {
     >_< declarations are immutable by default
-    >_< the type is optional
+    >_< the type is inferred as chan
     hi num = 1~ 
 
     >_< reassigning global variable
@@ -159,6 +159,21 @@ fun main-san() {
     )~
 }
 ```
+To declare a variadic parameter of optional types, add `?` before the ellipsis.
+```kotlin
+fun square_then_print-san(args-Stringable?...) {}
+>_< args is Stringable?[1]
+```
+To declare an optional variadic parameter, add `?` after the ellipsis.
+```kotlin
+fun square_then_print-san(args-Stringable...?) {}
+>_< args is Stringable[1]?
+```
+You can even get wacky like this:
+```kotlin
+fun square_then_print-san(args-Stringable?...?) {}
+>_< args is Stringable?[1]?
+```
 output: `hello, world!`
 
 # Type System
@@ -207,34 +222,47 @@ output: `hello, world!`
     - `dono` alone means any type, even [optional types](#optional-type) and [collection types](#collection-types)
 
 ## Optional Type
-Declare an optional type by putting a `?` after the name or the type,
-depending on whether the type is declared.
+Declare an optional type by putting a `?` after the type.
 ```kotlin
->_< both are optional type chan
+>_< valid. optional type chan
 hi aqua-chan? = nuww~
+>_< invalid, must have a type specified
 hi shion? = 10~
 ```
-To declare a mutable optional type, put `!` before the `?` (order matters)
+You need to declare the type if you're planning to use an optional type.
+To declare a mutable variable, put a `!` after the name or type, depending on
+whether the type is declared. That means, to declare a mutable optional type,
+put `!` after `?`.
 ```kotlin
->_< both are mutable optional type chan
-hi aqua-chan!? = nuww~
-hi shion!? = 10~
+>_< valid. mutable variable with optional type chan
+hi aqua-chan?! = nuww~
+>_< invalid, must have a type specified
+hi shion?! = 10~
 ```
+While `hi shion? = 10~` and `hi shion?! = 10~` is invalid since the type needs
+to be declared when using an optional type, `hi shion! = 10~` is valid. This is
+because mutability is not part of the type but is associated with the variable
+name.
+
 Example:
 ```kotlin
 >_< optional chan can have an int or nuww as a value
 hi aqua-chan? = 1~
 hi shion-chan? = nuww~
 
->_< adding ! before ? turns it into an optional variable that is mutable
-hi ojou-senpai!? = "hello"~
+>_< adding ! after ? turns it into an optional variable that is mutable
+hi ojou-senpai?! = "hello"~
 ojou = nuww~ 
-
-assewt(aqua.unwrap_or(0) + shion.unwrap_or(0) == 1)~
-assewt(ojou.unwrap_or(0) == 0)~
 
 >_< this will cause an error since the current value is nuww
 ojou.unwrap()
+
+>_< you cannot use an optional variable chan as a normal chan
+pwint(ojou + shion + aqua)~ >_< will cause an error
+
+>_< use unwrap_or to provide a fallback
+assewt(aqua.unwrap_or(0) + shion.unwrap_or(0) == 1)~
+assewt(ojou.unwrap_or(0) == 0)~
 ```
 
 ## Collection Types

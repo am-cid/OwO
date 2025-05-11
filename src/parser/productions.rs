@@ -1,4 +1,3 @@
-use crate::errors::parse_errors::NoMainError;
 use crate::lexer::token::{Offset, Position, Token, TokenKind};
 use crate::utils::string::StringExt;
 
@@ -9,15 +8,15 @@ use crate::utils::string::StringExt;
 /// - [Pipeline]
 const MAX_LINE_LENGTH: usize = 80;
 
-pub trait Production<'a>: Position<'a> {
+pub trait Production<'src>: Position<'src> {
     /// Converts the production to string based off the given source.
     /// `n` is the indent amount
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String;
-    // fn to_unformatted_string(&self, source: &'a str, n: usize) -> String;
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String;
+    // fn to_unformatted_string(&self, source: &'src str, n: usize) -> String;
     // fn transpile(&self, indent: usize) -> String;
 }
-impl<'a> Production<'a> for Token {
-    fn to_formatted_string(&self, source: &'a str, _n: usize) -> String {
+impl<'src> Production<'src> for Token {
+    fn to_formatted_string(&self, source: &'src str, _n: usize) -> String {
         self.source_str(source).to_string() // self.text.to_string()
     }
 }
@@ -35,7 +34,7 @@ pub struct Program {
     pub globals: Vec<Declaration>,
     pos: Offset,
 }
-impl<'a> Program {
+impl<'src> Program {
     pub fn new(
         main: Option<Function>,
         functions: Vec<Function>,
@@ -43,7 +42,7 @@ impl<'a> Program {
         methods: Vec<GroupMethod>,
         contracts: Vec<Contract>,
         globals: Vec<Declaration>,
-        source: &'a str,
+        source: &'src str,
     ) -> Self {
         Self {
             main: main.unwrap_or_default(),
@@ -56,13 +55,13 @@ impl<'a> Program {
         }
     }
 }
-impl<'a> Position<'a> for Program {
+impl<'src> Position<'src> for Program {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Program {
-    fn to_formatted_string(&self, source: &'a str, _n: usize) -> String {
+impl<'src> Production<'src> for Program {
+    fn to_formatted_string(&self, source: &'src str, _n: usize) -> String {
         format!(
             "{}{}{}{}{}{}",
             match &self.globals.len() {
@@ -151,19 +150,22 @@ impl Function {
                 .params
                 .clone()
                 .into_iter()
-                .map(|param| param.dtype)
+                .map(|param| match param {
+                    Param::Unit(res) => res.dtype,
+                    Param::Variadic(res) => res.param.dtype,
+                })
                 .collect::<Vec<DataType>>(),
             pos: Offset::default(),
         }
     }
 }
-impl<'a> Position<'a> for Function {
+impl<'src> Position<'src> for Function {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Function {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Function {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "fun {}-{}({} {{\n{}\n}}",
             self.id.source_str(source),
@@ -220,13 +222,13 @@ impl Group {
         }
     }
 }
-impl<'a> Position<'a> for Group {
+impl<'src> Position<'src> for Group {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Group {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Group {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "gwoup {} {{\n{}\n}}",
             self.id.source_str(source),
@@ -270,13 +272,13 @@ impl GroupMethod {
         }
     }
 }
-impl<'a> Position<'a> for GroupMethod {
+impl<'src> Position<'src> for GroupMethod {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for GroupMethod {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for GroupMethod {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "fun {}{} {}-{}({} {{\n{}\n}}",
             self.group.source_str(source),
@@ -335,13 +337,13 @@ impl Contract {
         }
     }
 }
-impl<'a> Position<'a> for Contract {
+impl<'src> Position<'src> for Contract {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Contract {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Contract {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "contwact {} {{\n{}\n}}",
             self.id.source_str(source),
@@ -371,13 +373,13 @@ impl FnSignature {
         }
     }
 }
-impl<'a> Position<'a> for FnSignature {
+impl<'src> Position<'src> for FnSignature {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for FnSignature {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for FnSignature {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}-{}({}~",
             self.id.source_str(source),
@@ -430,39 +432,105 @@ impl<'a> Production<'a> for FnSignature {
 //     }
 // }
 
-#[derive(Clone, Debug, Default)]
-pub struct Param {
-    pub id: Token,
-    pub dtype: DataType,
-    pub variadic: bool,
-    pos: Offset,
+#[derive(Clone, Debug)]
+pub enum Param {
+    Unit(ParamUnit),
+    Variadic(VariadicParam),
 }
 impl Param {
-    pub fn new(id: Token, dtype: DataType, variadic: bool, offset: (usize, usize)) -> Self {
+    fn as_position(&self) -> &dyn Position {
+        match self {
+            Self::Unit(res) => res,
+            Self::Variadic(res) => res,
+        }
+    }
+    fn as_production(&self) -> &dyn Production {
+        match self {
+            Self::Unit(res) => res,
+            Self::Variadic(res) => res,
+        }
+    }
+}
+impl<'src> Position<'src> for Param {
+    fn offset(&self) -> Offset {
+        self.as_position().offset()
+    }
+}
+impl<'src> Production<'src> for Param {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
+        self.as_production().to_formatted_string(source, n)
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ParamUnit {
+    pub id: Token,
+    pub dtype: DataType,
+    pos: Offset,
+}
+impl ParamUnit {
+    pub fn new(id: Token, dtype: DataType, offset: (usize, usize)) -> Self {
         Self {
             id,
             dtype,
-            variadic,
             pos: Offset::new(offset.0, offset.1),
         }
     }
 }
-impl<'a> Position<'a> for Param {
+impl<'src> Position<'src> for ParamUnit {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Param {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ParamUnit {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
-            "{}-{}{}",
+            "{}-{}",
             self.id.source_str(source),
             self.dtype.to_formatted_string(source, n),
-            if self.variadic { "..." } else { "" }
         )
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct VariadicParam {
+    pub param: ParamUnit,
+    pub optional: bool,
+    pos: Offset,
+}
+impl VariadicParam {
+    pub fn new(
+        id: Token,
+        dtype: DataType,
+        optional: bool,
+        param_offset: (usize, usize),
+        offset: (usize, usize),
+    ) -> Self {
+        Self {
+            param: ParamUnit {
+                id,
+                dtype,
+                pos: Offset::new(param_offset.0, param_offset.1),
+            },
+            optional,
+            pos: Offset::new(offset.0, offset.1),
+        }
+    }
+}
+impl<'src> Position<'src> for VariadicParam {
+    fn offset(&self) -> Offset {
+        self.pos
+    }
+}
+impl<'src> Production<'src> for VariadicParam {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
+        format!(
+            "{}...{}",
+            self.param.to_formatted_string(source, n),
+            if self.optional { "?" } else { "" }
+        )
+    }
+}
 #[derive(Clone, Debug, Default)]
 pub struct GroupField {
     pub id: Token,
@@ -478,13 +546,13 @@ impl GroupField {
         }
     }
 }
-impl<'a> Position<'a> for GroupField {
+impl<'src> Position<'src> for GroupField {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for GroupField {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for GroupField {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}-{}~",
             self.id.source_str(source),
@@ -506,13 +574,13 @@ impl Body {
         }
     }
 }
-impl<'a> Position<'a> for Body {
+impl<'src> Position<'src> for Body {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Body {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Body {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         self.statements
             .iter()
             .map(|stmt| stmt.to_formatted_string(source, n))
@@ -561,13 +629,13 @@ impl Statement {
         }
     }
 }
-impl<'a> Position<'a> for Statement {
+impl<'src> Position<'src> for Statement {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Statement {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Statement {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self {
             Self::Declaration(res) => res.to_formatted_string(source, n).indent(n),
             Self::Assignment(res) => res.to_formatted_string(source, n).indent(n),
@@ -596,7 +664,6 @@ pub struct Declaration {
     pub id: Token,
     pub dtype: Option<DataType>,
     pub mutable: bool,
-    pub optional: bool,
     pub expr: Expression,
     pos: Offset,
 }
@@ -605,36 +672,33 @@ impl Declaration {
         id: Token,
         dtype: Option<DataType>,
         mutable: bool,
-        optional: bool,
         expr: Expression,
         offset: (usize, usize),
     ) -> Self {
         Self {
             id,
             dtype,
-            optional,
             mutable,
             expr,
             pos: Offset::new(offset.0, offset.1),
         }
     }
 }
-impl<'a> Position<'a> for Declaration {
+impl<'src> Position<'src> for Declaration {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Declaration {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Declaration {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
-            "hi {}{}{}{} = {}~",
+            "hi {}{}{} = {}~",
             self.id.source_str(source),
             match &self.dtype {
                 Some(dtype) => "-".to_string() + &dtype.to_formatted_string(source, n),
                 None => "".into(),
             },
             if self.mutable { "!" } else { "" },
-            if self.optional { "?" } else { "" },
             self.expr.to_formatted_string(source, n),
         )
     }
@@ -657,13 +721,13 @@ impl Assignment {
         }
     }
 }
-impl<'a> Position<'a> for Assignment {
+impl<'src> Position<'src> for Assignment {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Assignment {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Assignment {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{} {} {}~",
             self.id.to_formatted_string(source, n),
@@ -698,13 +762,13 @@ impl IfStatement {
         }
     }
 }
-impl<'a> Position<'a> for IfStatement {
+impl<'src> Position<'src> for IfStatement {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for IfStatement {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for IfStatement {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "iwf {} {{\n{}\n{}{}\n{}",
             self.condition.to_formatted_string(source, n),
@@ -746,13 +810,13 @@ impl ElifStatement {
         }
     }
 }
-impl<'a> Position<'a> for ElifStatement {
+impl<'src> Position<'src> for ElifStatement {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for ElifStatement {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ElifStatement {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{} {} {{\n{}",
             "} ewif".indent(n),
@@ -787,13 +851,13 @@ impl ForLoop {
         }
     }
 }
-impl<'a> Position<'a> for ForLoop {
+impl<'src> Position<'src> for ForLoop {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for ForLoop {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ForLoop {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             // TODO: format this so if too long, separate init cond and update
             // by newlines
@@ -824,13 +888,13 @@ impl ForEach {
         }
     }
 }
-impl<'a> Position<'a> for ForEach {
+impl<'src> Position<'src> for ForEach {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for ForEach {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ForEach {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "fow {} in {} {{\n{}\n{}",
             self.item_id.to_formatted_string(source, 0),
@@ -863,13 +927,13 @@ impl MashStatement {
         }
     }
 }
-impl<'a> Position<'a> for MashStatement {
+impl<'src> Position<'src> for MashStatement {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for MashStatement {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for MashStatement {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "mash {} {{\n{}{}{}",
             self.expr.to_formatted_string(source, n),
@@ -913,13 +977,13 @@ impl Case {
         }
     }
 }
-impl<'a> Position<'a> for Case {
+impl<'src> Position<'src> for Case {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Case {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Case {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}:{}\n",
             self.case_type.to_formatted_string(source, 0).indent(n),
@@ -945,13 +1009,13 @@ impl ReturnStatement {
         }
     }
 }
-impl<'a> Position<'a> for ReturnStatement {
+impl<'src> Position<'src> for ReturnStatement {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for ReturnStatement {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ReturnStatement {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!("wetuwn {}~", self.expr.to_formatted_string(source, n))
     }
 }
@@ -976,7 +1040,7 @@ pub enum Expression {
     Infix(InfixExpression),
     Grouped(GroupedExpression),
 }
-impl<'a> Expression {
+impl<'src> Expression {
     pub fn is_indexable(&self) -> bool {
         match self {
             Self::FnCall(_) | Self::Access(_) => true,
@@ -1048,13 +1112,13 @@ impl<'a> Expression {
         }
     }
 }
-impl<'a> Position<'a> for Expression {
+impl<'src> Position<'src> for Expression {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Expression {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Expression {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         self.as_production().to_formatted_string(source, n)
     }
 }
@@ -1095,13 +1159,13 @@ impl FnCall {
         }
     }
 }
-impl<'a> Position<'a> for FnCall {
+impl<'src> Position<'src> for FnCall {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for FnCall {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for FnCall {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}({}",
             self.id.source_str(source),
@@ -1195,13 +1259,13 @@ impl From<GroupAccess<MethodAccess>> for GroupAccess<FieldAccess> {
         Self::new(value.accessor, value.accessed, std::marker::PhantomData)
     }
 }
-impl<'a, T> Position<'a> for GroupAccess<T> {
+impl<'src, T> Position<'src> for GroupAccess<T> {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a, T> Production<'a> for GroupAccess<T> {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src, T> Production<'src> for GroupAccess<T> {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self.accessed.len() {
             0 => unreachable!(),
             _ => {
@@ -1259,13 +1323,13 @@ impl AccessType {
         }
     }
 }
-impl<'a> Position<'a> for AccessType {
+impl<'src> Position<'src> for AccessType {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for AccessType {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for AccessType {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         self.as_production().to_formatted_string(source, n)
     }
 }
@@ -1285,13 +1349,13 @@ impl GroupInit {
         }
     }
 }
-impl<'a> Position<'a> for GroupInit {
+impl<'src> Position<'src> for GroupInit {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for GroupInit {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for GroupInit {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}({}",
             self.id.source_str(source),
@@ -1349,13 +1413,13 @@ impl IndexedId {
         }
     }
 }
-impl<'a> Position<'a> for IndexedId {
+impl<'src> Position<'src> for IndexedId {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for IndexedId {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for IndexedId {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}[{}",
             self.id.to_formatted_string(source, n),
@@ -1415,13 +1479,13 @@ impl PrefixExpression {
         }
     }
 }
-impl<'a> Position<'a> for PrefixExpression {
+impl<'src> Position<'src> for PrefixExpression {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for PrefixExpression {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for PrefixExpression {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match &self.op.kind {
             TokenKind::Dash => format!(
                 "{}{}",
@@ -1455,15 +1519,15 @@ impl InfixExpression {
         }
     }
 }
-impl<'a> Position<'a> for InfixExpression {
+impl<'src> Position<'src> for InfixExpression {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for InfixExpression {
+impl<'src> Production<'src> for InfixExpression {
     /// TODO: use better logic than this rudimentary implementation
     /// it currenly indents way too much if combined LR exceeds [MAX_LINE_LENGTH] chars
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self.left.to_formatted_string(source, 0).len()
             + self.right.to_formatted_string(source, 0).len()
         {
@@ -1500,13 +1564,13 @@ impl GroupedExpression {
         }
     }
 }
-impl<'a> Position<'a> for GroupedExpression {
+impl<'src> Position<'src> for GroupedExpression {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for GroupedExpression {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for GroupedExpression {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         let indented_close_paren = ")".indent(n);
         match &self.expr.to_formatted_string(source, 0).len() {
             0..=MAX_LINE_LENGTH => {
@@ -1542,13 +1606,13 @@ impl Pipeline {
         }
     }
 }
-impl<'a> Position<'a> for Pipeline {
+impl<'src> Position<'src> for Pipeline {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for Pipeline {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Pipeline {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "{}{}",
             self.first.to_formatted_string(source, n),
@@ -1639,13 +1703,13 @@ impl ArrayLiteral {
         }
     }
 }
-impl<'a> Position<'a> for ArrayLiteral {
+impl<'src> Position<'src> for ArrayLiteral {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for ArrayLiteral {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for ArrayLiteral {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "[{}",
             match &self
@@ -1699,13 +1763,13 @@ impl SetLiteral {
         }
     }
 }
-impl<'a> Position<'a> for SetLiteral {
+impl<'src> Position<'src> for SetLiteral {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for SetLiteral {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for SetLiteral {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "#[{}",
             match &self
@@ -1759,13 +1823,13 @@ impl MapLiteral {
         }
     }
 }
-impl<'a> Position<'a> for MapLiteral {
+impl<'src> Position<'src> for MapLiteral {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for MapLiteral {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for MapLiteral {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
             "#[{}",
             if self.exprs.len() == 0 {
@@ -1829,20 +1893,53 @@ impl<'a> Production<'a> for MapLiteral {
 
 // DATA TYPE PRODUCTIONS {{{
 
+#[derive(Clone, Debug, Default)]
+pub struct DataTypeUnit {
+    pub tok: Token,
+    pub optional: bool,
+    pos: Offset,
+}
+impl<'src> DataTypeUnit {
+    pub fn new(tok: Token, optional: bool, offset: (usize, usize)) -> Self {
+        Self {
+            tok,
+            optional,
+            pos: Offset::new(offset.0, offset.1),
+        }
+    }
+    pub fn eq_dtype(&self, other: &Self, source: &'src str) -> bool {
+        self.tok.eq_dtype(&other.tok, source) && self.optional == other.optional
+    }
+}
+impl<'src> Position<'src> for DataTypeUnit {
+    fn offset(&self) -> Offset {
+        self.pos
+    }
+}
+impl<'src> Production<'src> for DataTypeUnit {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
+        format!(
+            "{}{}",
+            self.tok.to_formatted_string(source, n),
+            if self.optional { "?" } else { "" }
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum DataType {
-    Token(Token),
+    Unit(DataTypeUnit),
     Vec(VecType),
     Set(SetType),
     Map(MapType),
 }
-impl<'a> DataType {
-    pub fn eq_dtype(&self, other: &DataType, source: &'a str) -> bool {
+impl<'src> DataType {
+    pub fn eq_dtype(&self, other: &Self, source: &'src str) -> bool {
         match (self, other) {
             // this needs to be first so the next case will not consider
             // comparing token with token
-            (Self::Token(first), Self::Token(second)) => first.eq_dtype(second, source),
-            (Self::Token(res), _) | (_, Self::Token(res)) => res.kind == TokenKind::Dono,
+            (Self::Unit(first), Self::Unit(second)) => first.eq_dtype(second, source),
+            (Self::Unit(res), _) | (_, Self::Unit(res)) => res.tok.kind == TokenKind::Dono,
             (Self::Vec(first), Self::Vec(second)) => first.eq_dtype(second, source),
             (Self::Set(first), Self::Set(second)) => first.eq_dtype(second, source),
             (Self::Map(first), Self::Map(second)) => first.eq_dtype(second, source),
@@ -1851,22 +1948,22 @@ impl<'a> DataType {
     }
     fn as_position(&self) -> &dyn Position {
         match self {
-            Self::Token(res) => res,
+            Self::Unit(res) => res,
             Self::Vec(res) => res,
             Self::Set(res) => res,
             Self::Map(res) => res,
         }
     }
 }
-impl<'a> Position<'a> for DataType {
+impl<'src> Position<'src> for DataType {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for DataType {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for DataType {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.to_formatted_string(source, n),
+            Self::Unit(tok) => tok.to_formatted_string(source, n),
             Self::Vec(vec) => vec.to_formatted_string(source, n),
             Self::Set(set) => set.to_formatted_string(source, n),
             Self::Map(map) => map.to_formatted_string(source, n),
@@ -1875,23 +1972,23 @@ impl<'a> Production<'a> for DataType {
 }
 impl Default for DataType {
     fn default() -> Self {
-        Self::Token(Token::default())
+        Self::Unit(DataTypeUnit::default())
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum Vectorable {
-    Token(Token),
+    Unit(DataTypeUnit),
     Set(SetType),
     Map(MapType),
 }
-impl<'a> Vectorable {
-    pub fn eq_dtype(&self, other: &Vectorable, source: &'a str) -> bool {
+impl<'src> Vectorable {
+    pub fn eq_dtype(&self, other: &Vectorable, source: &'src str) -> bool {
         match (self, other) {
             // this needs to be first so the next case will not consider
             // comparing token with token
-            (Self::Token(first), Self::Token(second)) => first.eq_dtype(second, source),
-            (Self::Token(res), _) | (_, Self::Token(res)) => res.kind == TokenKind::Dono,
+            (Self::Unit(first), Self::Unit(second)) => first.eq_dtype(second, source),
+            (Self::Unit(res), _) | (_, Self::Unit(res)) => res.tok.kind == TokenKind::Dono,
             (Self::Set(first), Self::Set(second)) => first.eq_dtype(second, source),
             (Self::Map(first), Self::Map(second)) => first.eq_dtype(second, source),
             _ => false,
@@ -1899,21 +1996,21 @@ impl<'a> Vectorable {
     }
     fn as_position(&self) -> &dyn Position {
         match self {
-            Self::Token(res) => res,
+            Self::Unit(res) => res,
             Self::Set(res) => res,
             Self::Map(res) => res,
         }
     }
 }
-impl<'a> Position<'a> for Vectorable {
+impl<'src> Position<'src> for Vectorable {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Vectorable {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Vectorable {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self {
-            Self::Token(tok) => tok.to_formatted_string(source, n),
+            Self::Unit(tok) => tok.to_formatted_string(source, n),
             Self::Set(set) => set.to_formatted_string(source, n),
             Self::Map(map) => map.to_formatted_string(source, n),
         }
@@ -1921,7 +2018,7 @@ impl<'a> Production<'a> for Vectorable {
 }
 impl Default for Vectorable {
     fn default() -> Self {
-        Self::Token(Token::default())
+        Self::Unit(DataTypeUnit::default())
     }
 }
 
@@ -1934,32 +2031,35 @@ impl Default for Vectorable {
 pub struct VecType {
     pub id: Vectorable,
     pub dim: Token,
+    pub optional: bool,
     pos: Offset,
 }
-impl<'a> VecType {
-    pub fn new(id: Vectorable, dim: Token, offset: (usize, usize)) -> Self {
+impl<'src> VecType {
+    pub fn new(id: Vectorable, dim: Token, optional: bool, offset: (usize, usize)) -> Self {
         Self {
             id,
             dim,
+            optional,
             pos: Offset::new(offset.0, offset.1),
         }
     }
-    pub fn eq_dtype(&self, other: &VecType, source: &'a str) -> bool {
+    pub fn eq_dtype(&self, other: &VecType, source: &'src str) -> bool {
         self.id.eq_dtype(&other.id, source)
             && self.dim.source_str(source) == other.dim.source_str(source)
     }
 }
-impl<'a> Position<'a> for VecType {
+impl<'src> Position<'src> for VecType {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for VecType {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for VecType {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
-            "{}[{}]",
+            "{}[{}]{}",
             self.id.to_formatted_string(source, n),
-            self.dim.source_str(source)
+            self.dim.source_str(source),
+            if self.optional { "?" } else { "" }
         )
     }
 }
@@ -1970,28 +2070,34 @@ impl<'a> Production<'a> for VecType {
 ///     - in this case `chan` and the fact its a [SetType]
 #[derive(Clone, Debug)]
 pub struct SetType {
-    pub tok: Token,
+    pub dtype: DataTypeUnit,
+    pub optional: bool,
     pos: Offset,
 }
-impl<'a> SetType {
-    pub fn new(tok: Token, offset: (usize, usize)) -> Self {
+impl<'src> SetType {
+    pub fn new(dtype: DataTypeUnit, optional: bool, offset: (usize, usize)) -> Self {
         Self {
-            tok,
+            dtype,
+            optional,
             pos: Offset::new(offset.0, offset.1),
         }
     }
-    pub fn eq_dtype(&self, other: &SetType, source: &'a str) -> bool {
-        self.tok.eq_dtype(&other.tok, source)
+    pub fn eq_dtype(&self, other: &SetType, source: &'src str) -> bool {
+        self.dtype.eq_dtype(&other.dtype, source)
     }
 }
-impl<'a> Position<'a> for SetType {
+impl<'src> Position<'src> for SetType {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for SetType {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
-        format!("{}{{}}", self.tok.to_formatted_string(source, n))
+impl<'src> Production<'src> for SetType {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
+        format!(
+            "{}{{}}{}",
+            self.dtype.to_formatted_string(source, n),
+            if self.optional { "?" } else { "" }
+        )
     }
 }
 
@@ -2001,36 +2107,46 @@ impl<'a> Production<'a> for SetType {
 /// a [MapType]
 #[derive(Clone, Debug)]
 pub struct MapType {
-    pub tok: Token,
-    pub inner: Box<DataType>,
+    pub dtype: DataTypeUnit,
+    pub inner_dtype: Box<DataType>,
+    pub optional: bool,
     pos: Offset,
 }
-impl<'a> MapType {
-    pub fn new(tok: Token, inner: Box<DataType>, offset: (usize, usize)) -> Self {
+impl<'src> MapType {
+    pub fn new(
+        dtype: DataTypeUnit,
+        inner_dtype: Box<DataType>,
+        optional: bool,
+        offset: (usize, usize),
+    ) -> Self {
         Self {
-            tok,
-            inner,
+            dtype,
+            inner_dtype,
+            optional,
             pos: Offset::new(offset.0, offset.1),
         }
     }
-    pub fn eq_dtype(&self, other: &MapType, source: &'a str) -> bool {
-        self.tok.eq_dtype(&other.tok, source) && self.inner.eq_dtype(&other.inner, source)
+    pub fn eq_dtype(&self, other: &MapType, source: &'src str) -> bool {
+        self.dtype.eq_dtype(&other.dtype, source)
+            && self.inner_dtype.eq_dtype(&other.inner_dtype, source)
     }
 }
-impl<'a> Position<'a> for MapType {
+impl<'src> Position<'src> for MapType {
     fn offset(&self) -> Offset {
         self.pos
     }
 }
-impl<'a> Production<'a> for MapType {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for MapType {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         format!(
-            "{}{{{}}}",
-            self.tok.to_formatted_string(source, n),
-            self.inner.to_formatted_string(source, 0)
+            "{}{{{}}}{}",
+            self.dtype.to_formatted_string(source, n),
+            self.inner_dtype.to_formatted_string(source, 0),
+            if self.optional { "?" } else { "" }
         )
     }
 }
+
 // }}}
 
 // IDENTIFIER BASED ON CONTEXT PRODUCTIONS {{{
@@ -2054,13 +2170,13 @@ impl Assignable {
         }
     }
 }
-impl<'a> Position<'a> for Assignable {
+impl<'src> Position<'src> for Assignable {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Assignable {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Assignable {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self {
             Self::Token(id) => id.to_formatted_string(source, n),
             Self::Indexed(idx) => idx.to_formatted_string(source, n),
@@ -2137,13 +2253,13 @@ impl Indexable {
         }
     }
 }
-impl<'a> Position<'a> for Indexable {
+impl<'src> Position<'src> for Indexable {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Indexable {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Indexable {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         self.as_production().to_formatted_string(source, n)
     }
 }
@@ -2196,13 +2312,13 @@ impl Accessed {
         }
     }
 }
-impl<'a> Position<'a> for Accessed {
+impl<'src> Position<'src> for Accessed {
     fn offset(&self) -> Offset {
         self.as_position().offset()
     }
 }
-impl<'a> Production<'a> for Accessed {
-    fn to_formatted_string(&self, source: &'a str, n: usize) -> String {
+impl<'src> Production<'src> for Accessed {
+    fn to_formatted_string(&self, source: &'src str, n: usize) -> String {
         match self {
             Self::Token(tok) => tok.to_formatted_string(source, n),
             Self::FnCall(fn_call) => fn_call.to_formatted_string(source, n),

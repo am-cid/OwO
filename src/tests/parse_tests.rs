@@ -198,30 +198,34 @@ fun main-san() {
 fn optional_types() {
     let source = r#"
 fun main-san() {
-    hi aqua-chan?=nuww~hi aqua-chan!?=1~
-    hi aqua-kun[1]?=nuww~hi aqua-kun[1]!?=[2.0,]~
-    hi aqua-sama{}?=nuww~hi aqua-sama{}!?=#[fax,]~
-    hi aqua-senpai{kouhai}?=nuww~hi aqua-senpai{kouhai}!?=#["string": 's',]~
-    hi aqua-dono{san}?=nuww~hi aqua-dono{san}!?=#[any(1,2,3,): nuww,]~
-    hi aqua-Class?=nuww~hi aqua-Class!?=Class(4,5,6,)~
+    hi aqua-chan?=nuww~hi aqua-chan?! =1~
+    hi aqua-kun?[1]?=nuww~hi aqua-kun[1]?! =[2.0,]~
+    hi aqua-sama?{}?=nuww~hi aqua-sama{}?! =#[fax,]~
+    hi aqua-senpai?{kouhai?}?=nuww~hi aqua-senpai{kouhai}?! =#["string": 's',]~
+    hi aqua-dono?{san?}?=nuww~hi aqua-dono{san}?! =#[any(1,2,3,): nuww,]~
+    hi aqua-Class?=nuww~hi aqua-Class?! =Class(4,5,6,)~
 }
-fun Sample! mutable_method-san(other-chan){uwu.property+=other~}"#;
+fun Sample! mutable_method-san(other-chan,variadic-chan...?){uwu.property+=other~}
+fun Sample! another_mutable_method-san(another_variadic-chan?...?){uwu.property+=other~}"#;
     let formatted = r#"
 fun main-san() {
     hi aqua-chan? = nuww~
-    hi aqua-chan!? = 1~
-    hi aqua-kun[1]? = nuww~
-    hi aqua-kun[1]!? = [2.0]~
-    hi aqua-sama{}? = nuww~
-    hi aqua-sama{}!? = #[fax]~
-    hi aqua-senpai{kouhai}? = nuww~
-    hi aqua-senpai{kouhai}!? = #["string": 's']~
-    hi aqua-dono{san}? = nuww~
-    hi aqua-dono{san}!? = #[any(1, 2, 3): nuww]~
+    hi aqua-chan?! = 1~
+    hi aqua-kun?[1]? = nuww~
+    hi aqua-kun[1]?! = [2.0]~
+    hi aqua-sama?{}? = nuww~
+    hi aqua-sama{}?! = #[fax]~
+    hi aqua-senpai?{kouhai?}? = nuww~
+    hi aqua-senpai{kouhai}?! = #["string": 's']~
+    hi aqua-dono?{san?}? = nuww~
+    hi aqua-dono{san}?! = #[any(1, 2, 3): nuww]~
     hi aqua-Class? = nuww~
-    hi aqua-Class!? = Class(4, 5, 6)~
+    hi aqua-Class?! = Class(4, 5, 6)~
 }
-fun Sample! mutable_method-san(other-chan) {
+fun Sample! mutable_method-san(other-chan, variadic-chan...?) {
+    uwu.property += other~
+}
+fun Sample! another_mutable_method-san(another_variadic-chan?...?) {
     uwu.property += other~
 }"#
     .trim();

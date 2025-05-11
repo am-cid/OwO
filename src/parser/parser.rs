@@ -7,11 +7,11 @@ use crate::{
     lexer::token::{Position, Token, TokenKind},
     parser::productions::{
         AccessType, Accessed, ArrayLiteral, Assignable, Assignment, Body, Case, Contract, DataType,
-        Declaration, ElifStatement, Expression, FnCall, FnSignature, ForEach, ForLoop, Function,
-        Group, GroupAccess, GroupField, GroupInit, GroupMethod, GroupedExpression, IfStatement,
-        Indexable, IndexedId, InfixExpression, MapLiteral, MapType, MashStatement, Param, Pipeline,
-        PrefixExpression, Program, ReturnStatement, SetLiteral, SetType, Statement, VecType,
-        Vectorable,
+        DataTypeUnit, Declaration, ElifStatement, Expression, FnCall, FnSignature, ForEach,
+        ForLoop, Function, Group, GroupAccess, GroupField, GroupInit, GroupMethod,
+        GroupedExpression, IfStatement, Indexable, IndexedId, InfixExpression, MapLiteral, MapType,
+        MashStatement, Param, ParamUnit, Pipeline, PrefixExpression, Program, ReturnStatement,
+        SetLiteral, SetType, Statement, VariadicParam, VecType, Vectorable,
     },
 };
 
@@ -168,15 +168,6 @@ impl<'src> Parser<'src> {
                 return;
             }
             self.pos += 1;
-        }
-    }
-    /// advances cursor n times if the condition is met
-    fn advance_if<F>(&mut self, n: usize, mut condition: F)
-    where
-        F: FnMut(&mut Self) -> bool,
-    {
-        if condition(self) {
-            self.advance(n);
         }
     }
     /// advances cursor until the condition is met
@@ -346,7 +337,7 @@ impl<'src> Parser<'src> {
 
         let (dtype, error_count) = self
             .expect_peek_is_type()
-            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
             .skip_until(|parser| {
                 // follow set
@@ -402,13 +393,15 @@ impl<'src> Parser<'src> {
         while !self.peek_tok_is(TokenKind::RParen) {
             let param = self.parse_param();
             self.allow_hanging_comma(TokenKind::RParen);
-            if param.variadic {
-                self.expect_peek_is(TokenKind::RParen)
+            match param {
+                Param::Unit(_) => (),
+                Param::Variadic(_) => self
+                    .safe_expect_peek_is(TokenKind::RParen)
                     .recover()
                     .skip_until_peek_is(TokenKind::RParen)
                     .error_header("VARIADIC PARAMETER NOT LAST")
                     .error_context("Variadic parameter should be the last parameter.")
-                    .finish()
+                    .finish(),
             }
             params.push(param);
         }
@@ -437,21 +430,32 @@ impl<'src> Parser<'src> {
             .finish_with_error_count();
         let dtype = self
             .expect_peek_is_type()
-            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
             .skip_until_peek_is_in(&[TokenKind::Ellipsis, TokenKind::Comma, TokenKind::RParen])
             .limit_errors(error_count)
             .finish();
-        let variadic = self
-            .peek_tok_is(TokenKind::Ellipsis)
-            .then(|| self.advance(1))
-            .is_some();
-        Param::new(
-            id,
-            dtype,
-            variadic,
-            (id.offset.start, self.curr_tok().offset.end),
-        )
+        if self.peek_tok_is(TokenKind::Ellipsis) {
+            let param_offset_end = self.curr_tok().offset.end;
+            self.advance(1);
+            let optional = self
+                .peek_tok_is(TokenKind::Question)
+                .then(|| self.advance(1))
+                .is_some();
+            Param::Variadic(VariadicParam::new(
+                id,
+                dtype,
+                optional,
+                (id.offset.start, param_offset_end),
+                (id.offset.start, self.curr_tok().offset.end),
+            ))
+        } else {
+            Param::Unit(ParamUnit::new(
+                id,
+                dtype,
+                (id.offset.start, self.curr_tok().offset.end),
+            ))
+        }
     }
 
     /// starts with [TokenKind::Group] in current
@@ -529,7 +533,7 @@ impl<'src> Parser<'src> {
             .finish();
         let dtype = self
             .expect_peek_is_type()
-            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
             .skip_until_peek_is_in(&[
                 TokenKind::Terminator,
@@ -633,7 +637,7 @@ impl<'src> Parser<'src> {
             .finish_with_error_count();
         let (dtype, error_count) = self
             .expect_peek_is_type()
-            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
             .skip_until(|parser| {
                 parser.peek_tok_is_in(&[
@@ -674,7 +678,7 @@ impl<'src> Parser<'src> {
         while !self.peek_tok_is(TokenKind::RParen) {
             let (param, ec) = self
                 .expect_peek_is_type()
-                .ok_then(|parser, actual| parser.parse_data_type(actual))
+                .ok_then(|parser, _| parser.parse_data_type())
                 .or_recover()
                 .skip_one_if(|parser| {
                     !parser.peek_tok_is_in(&[TokenKind::Comma, TokenKind::RParen])
@@ -741,7 +745,7 @@ impl<'src> Parser<'src> {
                 .map(|(&tokens, _)| tokens)
                 .collect::<Vec<_>>(),
         };
-        self.peek_is_in(&expected)
+        self.safe_expect_peek_is_in(&expected)
             .ok_then(|parser, actual| {
                 let body_parser = match body_type {
                     BodyType::For => parser
@@ -785,67 +789,34 @@ impl<'src> Parser<'src> {
     /// - [DataType] token literal (`chan`, `kun`, `senpai`...)
     /// - [TokenKind::RBracket] (`chan[1]`, `kun[3]` ...)
     /// - [TokenKind::RBrace] (`chan{}`, `kun{senpai}` ...)
-    fn parse_data_type(&mut self, tok: Token) -> Result<DataType, ()> {
+    fn parse_data_type(&mut self) -> Result<DataType, ()> {
+        let unit = self.parse_data_type_unit();
         match self.peek_tok().kind {
-            TokenKind::LBracket => Ok(self.parse_vector_type(Vectorable::Token(tok))),
-            TokenKind::LBrace => {
-                self.advance(2);
-                match self.curr_tok().kind {
-                    TokenKind::RBrace => match self.peek_tok().kind {
-                        TokenKind::LBracket => Ok(self.parse_vector_type(Vectorable::Set(
-                            SetType::new(tok, (tok.offset.start, tok.offset.end)),
-                        ))),
-                        _ => Ok(DataType::Set(SetType::new(
-                            tok,
-                            (tok.offset.start, tok.offset.end),
-                        ))),
-                    },
-                    TokenKind::Type
-                    | TokenKind::Chan
-                    | TokenKind::Kun
-                    | TokenKind::Senpai
-                    | TokenKind::Kouhai
-                    | TokenKind::Sama
-                    | TokenKind::San
-                    | TokenKind::Dono => {
-                        let inner =
-                            Box::new(self.parse_data_type(self.curr_tok()).unwrap_or_default());
-                        let offset_end = self
-                            .expect_peek_is(TokenKind::RBrace)
-                            .ok_then(|_, actual| Ok(actual))
-                            .or_recover()
-                            .skip_one_if(|parser| {
-                                parser.peek_tok_nth(1).kind == TokenKind::LBracket
-                            })
-                            .finish()
-                            .offset
-                            .end;
-                        let res = MapType::new(tok, inner, (tok.offset.start, offset_end));
-                        match self.peek_tok().kind {
-                            TokenKind::LBracket => Ok(self.parse_vector_type(Vectorable::Map(res))),
-                            _ => Ok(DataType::Map(res)),
-                        }
-                    }
-                    _ => {
-                        self.unexpected_token_error(
-                            Some("INVALID INNER DATA TYPE"),
-                            Some("Only data types are allowed to be inner types"),
-                            self.curr_tok(),
-                            TokenKind::data_types(),
-                        );
-                        self.advance_if(1, |parser| parser.peek_tok_is(TokenKind::RBrace));
-                        Ok(DataType::default())
-                    }
-                }
-            }
-            _ => Ok(DataType::Token(tok)),
+            TokenKind::LBracket => Ok(self.parse_vector_type(Vectorable::Unit(unit))),
+            TokenKind::LBrace => self.parse_hash_type(unit),
+            _ => Ok(DataType::Unit(unit)),
         }
-        // TODO: put mutable + optional parsing here
+    }
+
+    /// starts with a [DataTypeUnit] token in current
+    /// ends with [DataTypeUnit] token or [TokenKind::Question] in current
+    fn parse_data_type_unit(&mut self) -> DataTypeUnit {
+        let tok = self.curr_tok();
+        let optional = self
+            .peek_tok_is(TokenKind::Question)
+            .then(|| self.advance(1))
+            .is_some();
+        DataTypeUnit::new(
+            tok,
+            optional,
+            (tok.offset.start, self.curr_tok().offset.end),
+        )
     }
 
     /// starts with [TokenKind::LBracket] in peek
-    /// ends with [TokenKind::RBracket] in current
-    /// ends with other closing delims in current if recovered from error
+    /// ends with any of the ff in current:
+    /// - [TokenKind::RBracket]
+    /// - [TokenKind::Question] (if optional)
     fn parse_vector_type(&mut self, id: Vectorable) -> DataType {
         self.advance(1);
         let dim = self
@@ -853,15 +824,102 @@ impl<'src> Parser<'src> {
             .ok_then(|_, actual| Ok(actual))
             .ignore_err()
             .finish();
-        let offset_end = self
-            .expect_peek_is(TokenKind::RBracket)
-            .ok_then(|_, actual| Ok(actual))
-            .ignore_err()
-            .finish()
-            .offset
-            .end;
-        let offset = (id.offset().start, offset_end);
-        DataType::Vec(VecType::new(id, dim, offset))
+        self.expect_peek_is(TokenKind::RBracket).ignore().finish();
+        let optional = self
+            .peek_tok_is(TokenKind::Question)
+            .then(|| self.advance(1))
+            .is_some();
+        let offset_start = id.offset().start;
+        DataType::Vec(VecType::new(
+            id,
+            dim,
+            optional,
+            (offset_start, self.curr_tok().offset.end),
+        ))
+    }
+
+    /// starts with [TokenKind::LBrace] in peek
+    /// ends with [TokenKind::RBrace] in current
+    ///
+    /// ends with any of the ff in current:
+    /// - [TokenKind::RBrace] (ended normally)
+    /// - [TokenKind::Question] (is optional)
+    /// - [TokenKind::RBracket] (parsed vec type)
+    fn parse_hash_type(&mut self, unit: DataTypeUnit) -> Result<DataType, ()> {
+        self.advance(1);
+        self.safe_expect_peek_is_in(&[
+            TokenKind::RBrace,
+            TokenKind::Type,
+            TokenKind::Chan,
+            TokenKind::Kun,
+            TokenKind::Senpai,
+            TokenKind::Kouhai,
+            TokenKind::San,
+            TokenKind::Sama,
+            TokenKind::Dono,
+        ])
+        .ok_then(|parser, actual| match actual.kind {
+            TokenKind::RBrace => Ok(parser.parse_set_type(unit.clone(), false)),
+            kind if kind.is_type() => parser.parse_map_type(unit.clone()),
+            _ => Err(()),
+        })
+        .ignore_err()
+        .error_header("INVALID INNER DATA TYPE")
+        .error_context("Only data types are allowed to be inner types")
+        .finish_result()
+    }
+
+    /// starts with any of the ff in peek
+    /// - [TokenKind::RBrace] (called normally)
+    /// - [TokenKind::Question] (recursive call with found question mark)
+    ///
+    /// ends with any of the ff in current:
+    /// - [TokenKind::RBrace] (ended normally)
+    /// - [TokenKind::Question] (is optional)
+    /// - [TokenKind::RBracket] (parsed vec type)
+    fn parse_set_type(&mut self, unit: DataTypeUnit, optional: bool) -> DataType {
+        self.advance(1);
+        let unit_offset = unit.offset();
+        match self.peek_tok().kind {
+            TokenKind::Question => self.parse_set_type(unit, true),
+            TokenKind::LBracket => self.parse_vector_type(Vectorable::Set(SetType::new(
+                unit,
+                optional,
+                (unit_offset.start, unit_offset.end),
+            ))),
+            _ => DataType::Set(SetType::new(
+                unit,
+                optional,
+                (unit_offset.start, unit_offset.end),
+            )),
+        }
+    }
+
+    /// starts with [DataTypeUnit] starting token in peek
+    /// ends with any of the ff:
+    /// - [TokenKind::RBrace] (ended normally)
+    /// - [TokenKind::Question] (is optional)
+    /// - [TokenKind::RBracket] (parsed vec type)
+    fn parse_map_type(&mut self, unit: DataTypeUnit) -> Result<DataType, ()> {
+        self.advance(1);
+        let inner = Box::new(self.parse_data_type()?);
+        self.expect_peek_is(TokenKind::RBrace)
+            .recover()
+            .skip_one_if(|parser| parser.peek_tok_nth(1).kind == TokenKind::LBracket)
+            .finish();
+        let offset_start = unit.offset().start;
+        let res = MapType::new(
+            unit,
+            inner,
+            self.peek_tok_is(TokenKind::Question)
+                .then(|| self.advance(1))
+                .is_some(),
+            (offset_start, self.curr_tok().offset.end),
+        );
+        match self.peek_tok().kind {
+            TokenKind::LBracket => Ok(self.parse_vector_type(Vectorable::Map(res))),
+            _ => Ok(DataType::Map(res)),
+        }
     }
 
     // }}}
@@ -906,7 +964,7 @@ impl<'src> Parser<'src> {
             self.advance(1);
             let (dtype, error_count) = self
                 .expect_peek_is_type()
-                .ok_then(|parser, actual| parser.parse_data_type(actual))
+                .ok_then(|parser, _| parser.parse_data_type())
                 .or_recover()
                 .skip_until(|parser| {
                     parser.peek_tok_is(TokenKind::Terminator)
@@ -925,10 +983,6 @@ impl<'src> Parser<'src> {
             .peek_tok_is(TokenKind::Bang)
             .then(|| self.advance(1))
             .is_some();
-        let optional = self
-            .peek_tok_is(TokenKind::Question)
-            .then(|| self.advance(1))
-            .is_some();
 
         self.expect_peek_is_assign_operator()
             .ignore()
@@ -943,7 +997,6 @@ impl<'src> Parser<'src> {
             id,
             dtype,
             mutable,
-            optional,
             expr,
             (start.offset.start, self.curr_tok().offset.end),
         )
@@ -1228,7 +1281,7 @@ impl<'src> Parser<'src> {
         let start = self.peek_tok();
         let case_type = self
             .expect_peek_is_type()
-            .ok_then(|parser, actual| parser.parse_data_type(actual))
+            .ok_then(|parser, _| parser.parse_data_type())
             .ignore_err()
             .finish();
         let body = self
@@ -1874,15 +1927,11 @@ impl<'src> Parser<'src> {
     /// ends with [TokenKind::Comma] in current and passed in closing in peek,
     /// regardless of whether the expect failed or not
     fn allow_hanging_comma(&mut self, closing: TokenKind) {
-        Expectation::new(vec![TokenKind::Comma], self.peek_tok(), self, true)
-            .ok_then(|parser, _| {
-                if parser.peek_tok_is(TokenKind::Comma) {
-                    Ok(parser.advance(1))
-                } else if parser.peek_tok_is(closing) {
-                    Ok(())
-                } else {
-                    Err(())
-                }
+        self.safe_expect_peek_is_in(&[TokenKind::Comma, closing])
+            .ok_then(|parser, actual| match actual.kind {
+                TokenKind::Comma => Ok(parser.advance(1)),
+                actual if actual == closing => Ok(()),
+                _ => Err(()),
             })
             .or_recover()
             .skip_until(|parser| {
@@ -1895,19 +1944,6 @@ impl<'src> Parser<'src> {
 
     // RECOVER EXPECT METHODS {{{
 
-    /// Like [Parser::expect_peek_is_in] but does not advance cursor 1 time if
-    /// peek tok is eq to any of the given.
-    fn peek_is_in(&mut self, token_kinds: &[TokenKind]) -> Expectation<'src, '_> {
-        let ok = token_kinds.contains(&self.peek_tok().kind);
-        Expectation::new(token_kinds.to_vec(), self.peek_tok(), self, ok)
-    }
-
-    /// advances cursor 1 time if peek tok is eq to given
-    /// allows to recover from the error otherwise
-    fn expect_peek_is(&mut self, token_kind: TokenKind) -> Expectation<'src, '_> {
-        self.expect_peek_is_in(&[token_kind])
-    }
-
     /// advances cursor 1 time if peek tok is eq to any of the given
     /// allows to recover from the error otherwise
     fn expect_peek_is_in(&mut self, token_kinds: &[TokenKind]) -> Expectation<'src, '_> {
@@ -1919,6 +1955,25 @@ impl<'src> Parser<'src> {
             self.peek_tok()
         };
         Expectation::new(token_kinds.to_vec(), actual, self, ok)
+    }
+
+    /// advances cursor 1 time if peek tok is eq to given
+    /// allows to recover from the error otherwise
+    fn expect_peek_is(&mut self, token_kind: TokenKind) -> Expectation<'src, '_> {
+        self.expect_peek_is_in(&[token_kind])
+    }
+
+    /// Like [Parser::expect_peek_is] but does not advance cursor 1 time if peek
+    /// tok is eq to any of the given.
+    fn safe_expect_peek_is(&mut self, token_kind: TokenKind) -> Expectation<'src, '_> {
+        self.safe_expect_peek_is_in(&[token_kind])
+    }
+
+    /// Like [Parser::expect_peek_is_in] but does not advance cursor 1 time if
+    /// peek tok is eq to any of the given.
+    fn safe_expect_peek_is_in(&mut self, token_kinds: &[TokenKind]) -> Expectation<'src, '_> {
+        let ok = token_kinds.contains(&self.peek_tok().kind);
+        Expectation::new(token_kinds.to_vec(), self.peek_tok(), self, ok)
     }
 
     /// advances cursor 1 time if peek token's type is a DataType
