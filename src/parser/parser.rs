@@ -343,7 +343,7 @@ impl<'src> Parser<'src> {
                 // follow set
                 parser.peek_tok_is_in(&[TokenKind::LParen, TokenKind::LBrace])
                 // end of dtypes
-                || parser.curr_tok_is_in(&[TokenKind::RBracket, TokenKind::RBrace])
+                || parser.curr_tok_is_in(&[TokenKind::RBracket, TokenKind::RBrace, TokenKind::Question])
                 || parser.curr_tok_is_type()
             })
             .limit_errors(error_count)
@@ -432,7 +432,17 @@ impl<'src> Parser<'src> {
             .expect_peek_is_type()
             .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
-            .skip_until_peek_is_in(&[TokenKind::Ellipsis, TokenKind::Comma, TokenKind::RParen])
+            .skip_until(|parser| {
+                // follow set
+                parser.peek_tok_is_in(&[TokenKind::Ellipsis, TokenKind::Comma, TokenKind::RParen])
+                // end of dtype
+                || parser.curr_tok_is_in(&[
+                    TokenKind::RBracket,
+                    TokenKind::RBrace,
+                    TokenKind::Question,
+                ])
+                || parser.curr_tok_is_type()
+            })
             .limit_errors(error_count)
             .finish();
         if self.peek_tok_is(TokenKind::Ellipsis) {
@@ -535,11 +545,21 @@ impl<'src> Parser<'src> {
             .expect_peek_is_type()
             .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
-            .skip_until_peek_is_in(&[
-                TokenKind::Terminator,
-                TokenKind::Identifier,
-                TokenKind::RBrace,
-            ])
+            .skip_until(|parser| {
+                // follow set
+                parser.peek_tok_is_in(&[
+                    TokenKind::Terminator,
+                    TokenKind::Identifier,
+                    TokenKind::RBrace,
+                ])
+                // end of dtype
+                || parser.curr_tok_is_in(&[
+                    TokenKind::RBracket,
+                    TokenKind::RBrace,
+                    TokenKind::Question,
+                ])
+                || parser.curr_tok_is_type()
+            })
             .finish();
         self.expect_peek_is(TokenKind::Terminator)
             .ok_then(|_, actual| Ok(actual))
@@ -640,11 +660,19 @@ impl<'src> Parser<'src> {
             .ok_then(|parser, _| parser.parse_data_type())
             .or_recover()
             .skip_until(|parser| {
+                // follow set
                 parser.peek_tok_is_in(&[
                     TokenKind::LParen,
                     TokenKind::RParen,
                     TokenKind::Terminator,
                 ])
+                // end of dtype
+                || parser.curr_tok_is_in(&[
+                    TokenKind::RBracket,
+                    TokenKind::RBrace,
+                    TokenKind::Question,
+                ])
+                || parser.curr_tok_is_type()
             })
             .limit_errors(error_count)
             .finish_with_error_count();
@@ -680,8 +708,12 @@ impl<'src> Parser<'src> {
                 .expect_peek_is_type()
                 .ok_then(|parser, _| parser.parse_data_type())
                 .or_recover()
-                .skip_one_if(|parser| {
-                    !parser.peek_tok_is_in(&[TokenKind::Comma, TokenKind::RParen])
+                .skip_until(|parser| {
+                    // follow set
+                    parser.peek_tok_is_in(&[TokenKind::Comma, TokenKind::RParen])
+                    // end of dtypes
+                    || parser.curr_tok_is_in(&[TokenKind::RBracket, TokenKind::RBrace, TokenKind::Question])
+                    || parser.curr_tok_is_type()
                 })
                 .limit_errors(error_count)
                 .finish_with_error_count();
@@ -752,7 +784,7 @@ impl<'src> Parser<'src> {
                         .body_parse_fns
                         .iter()
                         .filter(|&v| !&[TokenKind::Bweak, TokenKind::Continue].contains(&v.0))
-                        .map(|(&a, &b)| (a, b))
+                        .map(|(&tok, &parser)| (tok, parser))
                         .collect::<HashMap<_, _>>(),
                     _ => parser
                         .body_parse_fns
@@ -777,18 +809,13 @@ impl<'src> Parser<'src> {
 
     // DATA TYPE PARSERS {{{
 
-    // TODO: cannot parse optional and mutable as part of the data type
-    // - add a new data type struct with fields
-    //  - kind: DataTypeKind (which will be the old data type enum)
-    //  - mutable: bool
-    //  - optional: bool
-
     /// starts with [DataType]'s first token in current
     /// ends with [DataType]'s last token in current
     /// end token may be:
     /// - [DataType] token literal (`chan`, `kun`, `senpai`...)
     /// - [TokenKind::RBracket] (`chan[1]`, `kun[3]` ...)
     /// - [TokenKind::RBrace] (`chan{}`, `kun{senpai}` ...)
+    /// - [TokenKind::Question] (`chan?`, `senpai[1]?`, `kun{san}?` ...)
     fn parse_data_type(&mut self) -> Result<DataType, ()> {
         let unit = self.parse_data_type_unit();
         match self.peek_tok().kind {
@@ -967,10 +994,16 @@ impl<'src> Parser<'src> {
                 .ok_then(|parser, _| parser.parse_data_type())
                 .or_recover()
                 .skip_until(|parser| {
+                    // follow set
                     parser.peek_tok_is(TokenKind::Terminator)
-                        || parser.peek_tok_is_assign()
-                        || parser.curr_tok_is_in(&[TokenKind::RBracket, TokenKind::RBrace])
-                        || parser.curr_tok_is_type()
+                    || parser.peek_tok_is_assign()
+                    // end of dtype
+                    || parser.curr_tok_is_in(&[
+                        TokenKind::RBracket,
+                        TokenKind::RBrace,
+                        TokenKind::Question,
+                    ])
+                    || parser.curr_tok_is_type()
                 })
                 .limit_errors(error_count)
                 .finish_with_error_count();
