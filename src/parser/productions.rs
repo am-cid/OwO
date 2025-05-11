@@ -17,7 +17,10 @@ pub trait Production<'src>: Position<'src> {
 }
 impl<'src> Production<'src> for Token {
     fn to_formatted_string(&self, source: &'src str, _n: usize) -> String {
-        self.source_str(source).to_string() // self.text.to_string()
+        match self.kind {
+            TokenKind::EOF => "EOF".into(),
+            _ => self.source_str(source).to_string(),
+        }
     }
 }
 
