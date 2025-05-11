@@ -36,6 +36,8 @@ fun main-san() {
 }
 ```
 output: `hello world`
+
+---
 # IO
 `pwint` takes a variable amount of arguments of any type. Args are separated by
 space when printed
@@ -68,15 +70,19 @@ what is your last name?: 1000
 
 Press Enter to exit...
 ```
+
+---
 # Declaration and Assignment
 Declare a variable in the format:
 ```kotlin
 hi <variable-name>-<variable-type> = <value-assigned>~
 hi aqua-chan = 1~
 ```
-The dash followed by the variable type is immutable by default. To declare a
-mutable variable, put a `!` after the name or the type, depending on whether the
-type is declared.
+You can declare a variable without a type, where the type is inferred based on
+the value assigned to it.
+
+Variables are immutable by default. To declare a mutable variable, put a `!`
+after the name or the type, depending on whether the type is declared.
 ```kotlin
 >_< both have type chan
 hi aqua-chan! = 10~
@@ -100,6 +106,8 @@ fun main-san() {
 hi global_2-chan = 2~
 ```
 output: `0 1 2`
+
+---
 # Function Declaration and Calling
 Call a function by referencing its name and putting the arguments enclosed in
 parenthesis:
@@ -127,6 +135,8 @@ fun sum-chan(left-chan, right-chan!) {
 }
 ```
 output: `5`
+
+---
 # Variadic Parameters
 - Functions can take in any number of arguments given a **variadic parameter**
 is declared as the last parameter to a function/method.
@@ -159,6 +169,8 @@ fun main-san() {
     )~
 }
 ```
+output: `hello, world!`
+
 To declare a variadic parameter of optional types, add `?` before the ellipsis.
 ```kotlin
 fun square_then_print-san(args-Stringable?...) {}
@@ -174,8 +186,8 @@ You can even get wacky like this:
 fun square_then_print-san(args-Stringable?...?) {}
 >_< args is Stringable?[1]?
 ```
-output: `hello, world!`
 
+---
 # Type System
 ## Primitive Types
 1. `chan`: integer<br>
@@ -365,6 +377,8 @@ assewt(ojou.unwrap_or(0) == 0)~
     ```
     #["id": 1, "age": 18] #[:]
     ```
+
+---
 # User Defined Types
 ## Groups
 Groups are user defined types with fields and methods. Define a group in the
@@ -480,6 +494,8 @@ output
 1 2.0 three
 ```
 
+
+---
 # String Formatting
 `fowmat`
 - first argument must be of type `senpai` which may or may not contain
@@ -508,6 +524,8 @@ fun main-san() {
 ```
 output: `My name is Minato aqua! I am 18 years old and my blood type is ?????`
 
+
+---
 # Control Flow
 ## If-Else
 Use `iwf`, `ewse`, and `ewif` for branching.
@@ -621,6 +639,8 @@ output:
 4
 5
 ```
+
+---
 # Assertions
 `assewt(<condition>)~` takes only one `sama` (bool) argument and will crash the
 program if the condition is false
@@ -629,6 +649,8 @@ program if the condition is false
 assewt(1 == 2)~
 ```
 output: `Assertion failed: 1 == 2`
+
+---
 # Function Pipeline
 `|` operator can be used to chain functions.
 Result from the left hand side is passed as the first argument to the right hand side. Pipeline expressions must start with a variable or fn/method call, not literals or infix/prefix expressions
@@ -646,7 +668,7 @@ fun main-san() {
     | filter_evens()
     | sort_ascending()
     | pwint()~
-    >_< equivalent to: pwint(sort_ascending(filter_evens(totally_random_vec_of_nums())))
+    >_< equivalent to: pwint(sort_ascending(filter_evens([6,5,4,3,2,1])))
 }
 
 fun pow-chan(num-chan, exp-chan) {
